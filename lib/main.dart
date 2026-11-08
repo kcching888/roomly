@@ -21,6 +21,7 @@ import 'admin_members_screen.dart';
 import 'membership_status.dart';
 import 'add_member_dialog.dart';
 import 'roomly_logo.dart';
+import 'roomly_customization.dart';
 
 typedef Row = Map<String, dynamic>;
 
@@ -223,6 +224,9 @@ class _RoomlyAppState extends State<RoomlyApp> {
       darkTheme: _theme(Brightness.dark),
       themeMode: _mode,
       routerConfig: _router,
+      builder: (context, child) => RmPageShell(
+        child: child ?? const SizedBox.shrink(),
+),
     );
   }
 

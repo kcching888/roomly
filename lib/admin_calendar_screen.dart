@@ -4,6 +4,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'admin_service.dart';
 import 'roomly_logo.dart';
+import 'roomly_customization.dart';
 
 import 'admin_create_booking_screen.dart';
 import 'admin_booking_details_screen.dart';
@@ -376,7 +377,8 @@ Future<void> _openBookingDetails(AdminRow booking) async {
 
     return Scaffold(
       appBar: AppBar(
-        title: RoomlyPageTitle(
+        title: RmBrandTitle(
+          organizationId: widget.organizationId,
           title: 'Calendar · ${widget.organizationName}'
           ),
         actions: [
