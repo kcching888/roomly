@@ -6,6 +6,21 @@ import 'package:timezone/timezone.dart' as tz;
 import 'package:uuid/uuid.dart';
 import 'package:flutter/widgets.dart' as widgets show Row;
 
+import 'package:go_router/go_router.dart';
+import 'package:flutter_web_plugins/url_strategy.dart';
+
+import 'organization_welcome.dart';
+import 'admin_rooms_screen.dart';
+import 'admin_calendar_screen.dart';
+import 'admin_booking_details_screen.dart';
+import 'organization_profile_screen.dart';
+import 'platform_organizations_screen.dart';
+import 'admin_members_screen.dart';
+
+
+import 'membership_status.dart';
+import 'add_member_dialog.dart';
+
 typedef Row = Map<String, dynamic>;
 
 SupabaseClient get db => Supabase.instance.client;
@@ -54,11 +69,7 @@ String endTime(DateTime value, String zone) {
 
 // Interpret the selected time in the facility's timezone,
 // not in the timezone of the customer's phone or browser.
-DateTime facilityUtc(
-  DateTime day,
-  TimeOfDay time,
-  String zone,
-) {
+DateTime facilityUtc(DateTime day, TimeOfDay time, String zone) {
   final location = tz.getLocation(zone);
 
   final selected = tz.TZDateTime(
@@ -118,11 +129,11 @@ class RoomSearch {
   final int attendees;
 
   Map<String, dynamic> get parameters => {
-        'p_organization_id': organizationId,
-        'p_start': start.toIso8601String(),
-        'p_end': end.toIso8601String(),
-        'p_attendees': attendees,
-      };
+    'p_organization_id': organizationId,
+    'p_start': start.toIso8601String(),
+    'p_end': end.toIso8601String(),
+    'p_attendees': attendees,
+  };
 
   String get label {
     return '${bookingTime(start, zone)} – ${endTime(end, zone)}';
@@ -136,6 +147,7 @@ class RoomSearch {
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  usePathUrlStrategy();
   tzdata.initializeTimeZones();
 
   const url = String.fromEnvironment('SUPABASE_URL');
@@ -161,10 +173,7 @@ Future<void> main() async {
     return;
   }
 
-  await Supabase.initialize(
-    url: url,
-    anonKey: key,
-  );
+  await Supabase.initialize(url: url, anonKey: key);
 
   runApp(const RoomlyApp());
 }
@@ -193,63 +202,125 @@ class _RoomlyAppState extends State<RoomlyApp> {
           : const Color(0xFF171614),
       inputDecorationTheme: const InputDecorationTheme(
         border: OutlineInputBorder(),
-        contentPadding: EdgeInsets.symmetric(
-          horizontal: 16,
-          vertical: 16,
-        ),
+        contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 16),
       ),
       filledButtonTheme: FilledButtonThemeData(
-        style: FilledButton.styleFrom(
-          minimumSize: const Size(44, 48),
-        ),
+        style: FilledButton.styleFrom(minimumSize: const Size(44, 48)),
       ),
       outlinedButtonTheme: OutlinedButtonThemeData(
-        style: OutlinedButton.styleFrom(
-          minimumSize: const Size(44, 48),
-        ),
+        style: OutlinedButton.styleFrom(minimumSize: const Size(44, 48)),
       ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
+    return MaterialApp.router(
       title: 'Roomly',
       debugShowCheckedModeBanner: false,
       theme: _theme(Brightness.light),
       darkTheme: _theme(Brightness.dark),
       themeMode: _mode,
-      home: StreamBuilder<AuthState>(
-        stream: db.auth.onAuthStateChange,
-        builder: (context, snapshot) {
-          // Reset customer-specific state when the account changes.
-          return BookingHome(
-            key: ValueKey(db.auth.currentUser?.id ?? 'guest'),
-            toggleTheme: () {
-              setState(() {
-                final currentlyDark = _mode == ThemeMode.dark ||
-                    (_mode == ThemeMode.system &&
-                        WidgetsBinding
-                                .instance.platformDispatcher.platformBrightness ==
-                            Brightness.dark);
+      routerConfig: _router,
+    );
+  }
 
-                _mode =
-                    currentlyDark ? ThemeMode.light : ThemeMode.dark;
-              });
+  late final GoRouter _router = GoRouter(
+    routes: [
+      GoRoute(
+        path: '/',
+        builder: (context, state) {
+          return const Scaffold(
+            body: Center(
+              child: Padding(
+                padding: EdgeInsets.all(24),
+                child: Text(
+                  'Welcome to Roomly.\n\n'
+                  'Open the booking link provided by your organization.',
+                  textAlign: TextAlign.center,
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+      GoRoute(
+        path: '/o/:slug',
+        builder: (context, state) {
+          final slug = state.pathParameters['slug']!;
+
+          return StreamBuilder<AuthState>(
+            stream: db.auth.onAuthStateChange,
+            builder: (context, snapshot) {
+              if (snapshot.hasError) {
+                return const Scaffold(
+                  body: Center(
+                    child: Text(
+                      'Authentication could not be refreshed. '
+                      'Check your connection and reload.',
+                    ),
+                  ),
+                );
+              }
+
+              final userId = db.auth.currentUser?.id ?? 'guest';
+
+              return BookingHome(
+                key: ValueKey('$slug:$userId'),
+                organizationSlug: slug,
+                toggleTheme: _toggleTheme,
+              );
             },
           );
         },
       ),
-    );
+      GoRoute(
+        path: '/platform',
+        builder: (context, state) {
+          return const PlatformOrganizationsScreen();
+        },
+      ),
+    ],
+    errorBuilder: (context, state) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('Page not found')),
+        body: Center(
+          child: TextButton(
+            onPressed: () => context.go('/'),
+            child: const Text('Go to Roomly home'),
+          ),
+        ),
+      );
+    },
+  );
+
+  void _toggleTheme() {
+    setState(() {
+      final currentlyDark =
+          _mode == ThemeMode.dark ||
+          (_mode == ThemeMode.system &&
+              WidgetsBinding.instance.platformDispatcher.platformBrightness ==
+                  Brightness.dark);
+
+      _mode = currentlyDark ? ThemeMode.light : ThemeMode.dark;
+    });
+  }
+
+  @override
+  void dispose() {
+    _router.dispose();
+    super.dispose();
   }
 }
 
 class BookingHome extends StatefulWidget {
   const BookingHome({
     super.key,
+    required this.organizationSlug,
     required this.toggleTheme,
   });
 
+  final String organizationSlug;
   final VoidCallback toggleTheme;
 
   @override
@@ -261,6 +332,11 @@ class _BookingHomeState extends State<BookingHome> {
 
   List<Row> _organizations = [];
   Row? _organization;
+  Row? _signupContext;
+  String? _membershipNotice;
+  int _loadRequest = 0;
+  bool _requestingMembership = false;
+  String? _requestStatus;
 
   DateTime _day = DateTime.now().add(const Duration(days: 1));
   TimeOfDay _start = const TimeOfDay(hour: 9, minute: 0);
@@ -295,30 +371,60 @@ class _BookingHomeState extends State<BookingHome> {
   }
 
   Future<void> _loadOrganizations() async {
+    final request = ++_loadRequest;
+    ++_organizationRequest;
     setState(() {
       _loadingOrganizations = true;
       _error = null;
+      _membershipNotice = null;
+      _signupContext = null;
+      _organizations = [];
+      _organization = null;
+      _admin = false;
+      _tab = 0;
+      _results = null;
+      _searched = null;
+      _bookings = null;
     });
 
     try {
+      final signupResult = await db.rpc(
+        'rm_get_signup_context',
+        params: {'p_slug': widget.organizationSlug},
+      );
+      if (!mounted || request != _loadRequest) return;
+      setState(() {
+        _signupContext = signupResult == null
+            ? null
+            : Map<String, dynamic>.from(signupResult as Map);
+      });
+
+      if (db.auth.currentSession != null) {
+        final result = await db.rpc('rm_complete_signup_membership');
+        if (!mounted || request != _loadRequest) return;
+        final notice = result as String?;
+        setState(() {
+          _membershipNotice =
+              notice == 'No organization membership was requested.'
+              ? null
+              : notice;
+        });
+      }
+
       final data = await db
           .from('rm_organizations')
           .select()
-          .order('name');
-
-      if (!mounted) return;
-
-      setState(() {
-        _organizations = rows(data);
-        _loadingOrganizations = false;
-      });
-
+          .eq('slug', widget.organizationSlug)
+          .limit(1);
+      if (!mounted || request != _loadRequest) return;
+      setState(() => _organizations = rows(data));
       if (_organizations.isNotEmpty) {
         await _selectOrganization(_organizations.first);
       }
+      if (!mounted || request != _loadRequest) return;
+      setState(() => _loadingOrganizations = false);
     } catch (error) {
-      if (!mounted) return;
-
+      if (!mounted || request != _loadRequest) return;
       setState(() {
         _loadingOrganizations = false;
         _error = readableError(error);
@@ -405,6 +511,72 @@ class _BookingHomeState extends State<BookingHome> {
     });
   }
 
+  void _openRoomManagement() {
+    final organization = _organization;
+
+    if (organization == null) return;
+
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => AdminRoomsScreen(
+          organizationId: organization['id'] as String,
+          organizationName: organization['name'] as String,
+        ),
+      ),
+    );
+  }
+
+  void _openCalendar() {
+    final organization = _organization;
+
+    if (organization == null) return;
+
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => AdminCalendarScreen(
+          organizationId: organization['id'] as String,
+          organizationName: organization['name'] as String,
+          timezone: _zone,
+        ),
+      ),
+    );
+  }
+
+  Future<void> _openMemberManagement() async {
+    final organization = _organization;
+
+    if (organization == null || !_admin) return;
+
+    await Navigator.push<void>(
+      context,
+      MaterialPageRoute<void>(
+        builder: (_) => AdminMembersScreen(
+          organizationId: organization['id'] as String,
+          organizationName: organization['name'] as String,
+        ),
+      ),
+    );
+
+    if (!mounted) return;
+
+    // Refresh organization-related state after returning.
+    await _loadOrganizations();
+  }
+
+  Future<void> _openAddMember() async {
+    final organization = _organization;
+
+    if (organization == null || !_admin) return;
+
+    await showAddMemberDialog(
+      context: context,
+      organizationId: organization['id'] as String,
+      organizationName: organization['name'] as String,
+    );
+  }
+
   void _search() {
     if (_organization == null) return;
 
@@ -450,10 +622,7 @@ class _BookingHomeState extends State<BookingHome> {
   }
 
   Future<List<Row>> _fetchRooms(RoomSearch criteria) async {
-    final data = await db.rpc(
-      'rm_search_rooms',
-      params: criteria.parameters,
-    );
+    final data = await db.rpc('rm_search_rooms', params: criteria.parameters);
 
     return rows(data);
   }
@@ -473,11 +642,92 @@ class _BookingHomeState extends State<BookingHome> {
       query = query.eq('user_id', user.id);
     }
 
-    final data = await query
-        .order('starts_at', ascending: false)
-        .limit(100);
+    final data = await query.order('starts_at', ascending: false).limit(100);
 
     return rows(data);
+  }
+
+  Future<bool> _editManagedBooking(Row booking) async {
+    final organization = _organization;
+
+    if (organization == null || db.auth.currentUser == null) {
+      return false;
+    }
+
+    final status = booking['status'] as String?;
+
+    if (status != 'pending' && status != 'confirmed') {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Only pending or confirmed bookings can be edited.'),
+        ),
+      );
+
+      return false;
+    }
+
+    try {
+      // Load this organization's room choices.
+      final data = await db
+          .from('rm_rooms')
+          .select('id, name, active')
+          .eq('organization_id', organization['id'])
+          .order('name');
+
+      final roomOptions = <Map<String, dynamic>>[];
+
+      for (final item in data) {
+        // Include active rooms and the booking's current room.
+        if (item['active'] == true || item['id'] == booking['room_id']) {
+          roomOptions.add({'room_id': item['id'], 'room_name': item['name']});
+        }
+      }
+
+      if (!mounted) return false;
+
+      final currentRoomIncluded = roomOptions.any(
+        (room) => room['room_id'] == booking['room_id'],
+      );
+
+      if (!currentRoomIncluded) {
+        throw StateError('The booking room could not be loaded.');
+      }
+
+      // Convert the table fields to the editor's expected keys.
+      final editorBooking = <String, dynamic>{
+        'booking_id': booking['id'],
+        'room_id': booking['room_id'],
+        'booking_title': booking['title'],
+        'booking_status': booking['status'],
+        'booking_starts_at': booking['starts_at'],
+        'booking_ends_at': booking['ends_at'],
+        'attendees': booking['attendees'],
+        'quoted_total_cents': booking['quoted_total_cents'],
+      };
+
+      final updated = await Navigator.push<bool>(
+        context,
+        MaterialPageRoute<bool>(
+          builder: (_) => AdminBookingDetailsScreen(
+            organizationId: organization['id'] as String,
+            booking: editorBooking,
+            rooms: roomOptions,
+          ),
+        ),
+      );
+
+      if (!mounted) return false;
+
+      return updated == true;
+    } catch (error) {
+      if (!mounted) return false;
+
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Could not edit booking: $error')));
+
+      return false;
+    }
   }
 
   void _navigate(int index) {
@@ -491,11 +741,89 @@ class _BookingHomeState extends State<BookingHome> {
     });
   }
 
-  Future<void> _authenticate() async {
+  Future<void> _authenticate({bool register = false}) async {
+    final organizationId =
+        _organization?['id'] as String? ??
+        _signupContext?['organization_id'] as String?;
+
+    final organizationName =
+        _organization?['name'] as String? ??
+        _signupContext?['organization_name'] as String?;
+
     await showDialog<void>(
       context: context,
-      builder: (_) => const AuthDialog(),
+      builder: (_) => AuthDialog(
+        organizationId: organizationId,
+        organizationName: organizationName,
+        initialRegister: register,
+      ),
     );
+  }
+
+  Future<void> _requestMembership() async {
+    final organizationId =
+        _organization?['id'] as String? ??
+        _signupContext?['organization_id'] as String?;
+
+    if (db.auth.currentUser == null || organizationId == null) {
+      await _authenticate(register: true);
+      return;
+    }
+
+    if (_requestingMembership) return;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Request membership?'),
+        content: Text(
+          'Request membership in '
+          '${_organization?["name"] ?? _signupContext?["organization_name"] ?? "this organization"}?\n\n'
+          'An organization administrator will review your request. '
+          'This does not grant administrator access.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Submit request'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !mounted) return;
+
+    setState(() {
+      _requestingMembership = true;
+      _error = null;
+    });
+
+    try {
+      final result = await db.rpc(
+        'rm_request_organization_membership',
+        params: {'p_organization_id': organizationId},
+      );
+
+      if (!mounted) return;
+
+      setState(() {
+        _requestingMembership = false;
+        _requestStatus = result as String?;
+        _membershipNotice = _requestStatus;
+      });
+
+      await _loadOrganizations();
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _requestingMembership = false;
+        _error = readableError(error);
+      });
+    }
   }
 
   Future<void> _chooseRoom(Row room, RoomSearch criteria) async {
@@ -508,10 +836,7 @@ class _BookingHomeState extends State<BookingHome> {
     final completed = await showDialog<bool>(
       context: context,
       barrierDismissible: false,
-      builder: (_) => BookingDialog(
-        room: room,
-        criteria: criteria,
-      ),
+      builder: (_) => BookingDialog(room: room, criteria: criteria),
     );
 
     if (!mounted) return;
@@ -529,9 +854,7 @@ class _BookingHomeState extends State<BookingHome> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Update booking?'),
-        content: Text(
-          'Change "${booking['title']}" to $status?',
-        ),
+        content: Text('Change "${booking['title']}" to $status?'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
@@ -555,10 +878,7 @@ class _BookingHomeState extends State<BookingHome> {
     try {
       await db.rpc(
         'rm_change_booking_status',
-        params: {
-          'p_booking_id': booking['id'],
-          'p_status': status,
-        },
+        params: {'p_booking_id': booking['id'], 'p_status': status},
       );
 
       if (!mounted) return;
@@ -579,26 +899,50 @@ class _BookingHomeState extends State<BookingHome> {
     }
   }
 
-  Widget _message(
-    String title,
-    String detail, {
-    Widget? action,
-  }) {
+  Future<void> _openOrganizationProfile() async {
+    final organization = _organization;
+
+    if (organization == null || !_admin) return;
+
+    final organizationId = organization['id'] as String;
+
+    final savedName = await Navigator.push<String>(
+      context,
+      MaterialPageRoute<String>(
+        builder: (_) =>
+            OrganizationProfileScreen(organizationId: organizationId),
+      ),
+    );
+
+    if (!mounted || savedName == null) return;
+
+    setState(() {
+      _organizations = _organizations.map((item) {
+        if (item['id'] != organizationId) return item;
+
+        return <String, dynamic>{...item, 'name': savedName};
+      }).toList();
+
+      if (_organization?['id'] == organizationId) {
+        _organization = <String, dynamic>{..._organization!, 'name': savedName};
+      }
+    });
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Organization profile updated.')),
+    );
+  }
+
+  Widget _message(String title, String detail, {Widget? action}) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 40),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            title,
-            style: Theme.of(context).textTheme.titleLarge,
-          ),
+          Text(title, style: Theme.of(context).textTheme.titleLarge),
           const SizedBox(height: 8),
           Text(detail),
-          if (action != null) ...[
-            const SizedBox(height: 20),
-            action,
-          ],
+          if (action != null) ...[const SizedBox(height: 20), action],
         ],
       ),
     );
@@ -633,9 +977,7 @@ class _BookingHomeState extends State<BookingHome> {
                       child: OutlinedButton.icon(
                         onPressed: _pickDate,
                         icon: const Icon(Icons.calendar_today_outlined),
-                        label: Text(
-                          DateFormat('EEE, MMM d').format(_day),
-                        ),
+                        label: Text(DateFormat('EEE, MMM d').format(_day)),
                       ),
                     ),
                     SizedBox(
@@ -657,9 +999,7 @@ class _BookingHomeState extends State<BookingHome> {
                       child: TextField(
                         controller: _guests,
                         keyboardType: TextInputType.number,
-                        decoration: const InputDecoration(
-                          labelText: 'Guests',
-                        ),
+                        decoration: const InputDecoration(labelText: 'Guests'),
                         onChanged: (_) {
                           setState(_invalidateSearch);
                         },
@@ -718,7 +1058,7 @@ class _BookingHomeState extends State<BookingHome> {
                 return _message(
                   'No matching rooms',
                   'Try a different time or a smaller group. '
-                  'Opening hours and setup/cleanup time also affect availability.',
+                      'Opening hours and setup/cleanup time also affect availability.',
                 );
               }
 
@@ -786,9 +1126,7 @@ class _BookingHomeState extends State<BookingHome> {
                   .toList(),
             ),
             const SizedBox(height: 12),
-            Text(
-              '${money(room['hourly_rate_cents'] as num)} / hour',
-            ),
+            Text('${money(room['hourly_rate_cents'] as num)} / hour'),
             const SizedBox(height: 4),
             Text(
               '${money(criteria.estimate(room))} estimated room rental',
@@ -812,6 +1150,197 @@ class _BookingHomeState extends State<BookingHome> {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _compactAdminBooking(Row booking) {
+    final start = DateTime.parse(booking['starts_at'] as String);
+    final end = DateTime.parse(booking['ends_at'] as String);
+    final status = booking['status'] as String;
+
+    final roomData = booking['rm_rooms'];
+    final roomName = roomData is Map ? '${roomData['name'] ?? 'Room'}' : 'Room';
+
+    final active = status == 'pending' || status == 'confirmed';
+    final canManage = _admin && active && start.isAfter(DateTime.now());
+
+    final scheme = Theme.of(context).colorScheme;
+
+    final statusColor = switch (status) {
+      'confirmed' => Colors.green,
+      'pending' => Colors.orange.shade800,
+      'cancelled' => scheme.error,
+      'declined' => scheme.error,
+      _ => scheme.onSurfaceVariant,
+    };
+
+    final statusBadge = Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: statusColor.withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Text(
+        status.toUpperCase(),
+        style: TextStyle(
+          color: statusColor,
+          fontSize: 11,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+    );
+
+    Future<void> editBooking() async {
+      final updated = await _editManagedBooking(booking);
+
+      if (!mounted || !updated) return;
+
+      setState(() {
+        _error = null;
+        _bookings = _fetchBookings(_tab == 2);
+        _results = null;
+        _searched = null;
+      });
+    }
+
+    final actions = widgets.Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (canManage)
+          IconButton(
+            tooltip: 'Edit booking',
+            visualDensity: VisualDensity.compact,
+            onPressed: _changingStatus ? null : editBooking,
+            icon: const Icon(Icons.edit_outlined, size: 19),
+          ),
+
+        if (canManage && status == 'pending')
+          IconButton(
+            tooltip: 'Approve booking',
+            visualDensity: VisualDensity.compact,
+            color: scheme.primary,
+            onPressed: _changingStatus
+                ? null
+                : () => _changeStatus(booking, 'confirmed'),
+            icon: const Icon(Icons.check_circle_outline, size: 21),
+          ),
+
+        if (canManage)
+          PopupMenuButton<String>(
+            tooltip: 'More booking actions',
+            enabled: !_changingStatus,
+            icon: const Icon(Icons.more_vert, size: 20),
+            onSelected: (value) async {
+              await _changeStatus(booking, value);
+            },
+            itemBuilder: (_) => [
+              if (status == 'pending')
+                const PopupMenuItem<String>(
+                  value: 'declined',
+                  child: Text('Decline booking'),
+                ),
+              const PopupMenuItem<String>(
+                value: 'cancelled',
+                child: Text('Cancel booking'),
+              ),
+            ],
+          ),
+      ],
+    );
+
+    final identity = Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          booking['title'] as String,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+        ),
+        const SizedBox(height: 3),
+        Text(
+          '$roomName · ${booking['attendees']} guests',
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
+        ),
+      ],
+    );
+
+    final schedule = Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          '${bookingTime(start, _zone)} – ${endTime(end, _zone)}',
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(fontSize: 12),
+        ),
+        const SizedBox(height: 3),
+        Text(
+          '${money(booking['quoted_total_cents'] as num)} quoted',
+          style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
+        ),
+      ],
+    );
+
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: scheme.surface,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: scheme.outlineVariant),
+      ),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          if (constraints.maxWidth >= 800) {
+            return widgets.Row(
+              children: [
+                Expanded(flex: 3, child: identity),
+                const SizedBox(width: 16),
+                Expanded(flex: 3, child: schedule),
+                const SizedBox(width: 12),
+                SizedBox(
+                  width: 100,
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: statusBadge,
+                  ),
+                ),
+                SizedBox(
+                  width: 132,
+                  child: Align(
+                    alignment: Alignment.centerRight,
+                    child: actions,
+                  ),
+                ),
+              ],
+            );
+          }
+
+          // Stack the information on narrower screens.
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              widgets.Row(
+                children: [
+                  Expanded(child: identity),
+                  const SizedBox(width: 8),
+                  statusBadge,
+                ],
+              ),
+              const SizedBox(height: 6),
+              schedule,
+              if (canManage)
+                Align(alignment: Alignment.centerRight, child: actions),
+            ],
+          );
+        },
       ),
     );
   }
@@ -886,18 +1415,18 @@ class _BookingHomeState extends State<BookingHome> {
             }
 
             return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: bookings.map((booking) {
-                final start =
-                    DateTime.parse(booking['starts_at'] as String);
-                final end =
-                    DateTime.parse(booking['ends_at'] as String);
+                if (adminView) {
+                  return _compactAdminBooking(booking);
+                }
+                final start = DateTime.parse(booking['starts_at'] as String);
+                final end = DateTime.parse(booking['ends_at'] as String);
                 final status = booking['status'] as String;
-                final active =
-                    status == 'pending' || status == 'confirmed';
+                final active = status == 'pending' || status == 'confirmed';
                 final future = start.isAfter(DateTime.now());
                 final roomData = booking['rm_rooms'];
-                final roomName =
-                    roomData is Map ? roomData['name'] : 'Room';
+                final roomName = roomData is Map ? roomData['name'] : 'Room';
 
                 return Card(
                   margin: const EdgeInsets.only(bottom: 12),
@@ -908,8 +1437,7 @@ class _BookingHomeState extends State<BookingHome> {
                       children: [
                         Text(
                           booking['title'] as String,
-                          style:
-                              Theme.of(context).textTheme.titleLarge,
+                          style: Theme.of(context).textTheme.titleLarge,
                         ),
                         const SizedBox(height: 8),
                         Text('$roomName · ${booking['attendees']} guests'),
@@ -924,42 +1452,64 @@ class _BookingHomeState extends State<BookingHome> {
                           ' quoted room rental',
                         ),
                         const SizedBox(height: 8),
-                        Chip(
-                          label: Text(status.toUpperCase()),
-                        ),
+                        Chip(label: Text(status.toUpperCase())),
                         if (active && future) ...[
                           const SizedBox(height: 12),
                           Wrap(
                             spacing: 12,
                             runSpacing: 8,
                             children: [
+                              if (adminView && _admin)
+                                OutlinedButton.icon(
+                                  onPressed: _changingStatus
+                                      ? null
+                                      : () async {
+                                          final updated =
+                                              await _editManagedBooking(
+                                                booking,
+                                              );
+
+                                          if (!mounted || !updated) return;
+
+                                          setState(() {
+                                            _error = null;
+
+                                            // Reload whichever booking tab is currently open.
+                                            _bookings = _fetchBookings(
+                                              _tab == 2,
+                                            );
+
+                                            // Discard availability results made before the edit.
+                                            _results = null;
+                                            _searched = null;
+                                          });
+                                        },
+                                  icon: const Icon(Icons.edit_outlined),
+                                  label: const Text('Edit'),
+                                ),
+
                               if (adminView && status == 'pending')
                                 FilledButton(
                                   onPressed: _changingStatus
                                       ? null
-                                      : () => _changeStatus(
-                                            booking,
-                                            'confirmed',
-                                          ),
+                                      : () =>
+                                            _changeStatus(booking, 'confirmed'),
                                   child: const Text('Approve'),
                                 ),
+
                               if (adminView && status == 'pending')
                                 OutlinedButton(
                                   onPressed: _changingStatus
                                       ? null
-                                      : () => _changeStatus(
-                                            booking,
-                                            'declined',
-                                          ),
+                                      : () =>
+                                            _changeStatus(booking, 'declined'),
                                   child: const Text('Decline'),
                                 ),
+
                               TextButton(
                                 onPressed: _changingStatus
                                     ? null
-                                    : () => _changeStatus(
-                                          booking,
-                                          'cancelled',
-                                        ),
+                                    : () => _changeStatus(booking, 'cancelled'),
                                 child: const Text('Cancel booking'),
                               ),
                             ],
@@ -1008,32 +1558,23 @@ class _BookingHomeState extends State<BookingHome> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    if (_organizations.isNotEmpty) ...[
-                      DropdownButtonFormField<String>(
-                        initialValue: _organization?['id'] as String?,
-                        isExpanded: true,
-                        decoration: const InputDecoration(
-                          labelText: 'Organization',
-                        ),
-                        items: _organizations.map((organization) {
-                          return DropdownMenuItem<String>(
-                            value: organization['id'] as String,
-                            child: Text(
-                              organization['name'] as String,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          );
-                        }).toList(),
-                        onChanged: (id) {
-                          if (id == null) return;
-
-                          _selectOrganization(
-                            _organizations.firstWhere(
-                              (organization) =>
-                                  organization['id'] == id,
-                            ),
-                          );
-                        },
+                    if (_membershipNotice != null) ...[
+                      Text(_membershipNotice!),
+                      const SizedBox(height: 12),
+                    ],
+                    if (db.auth.currentUser != null) ...[
+                      MembershipStatus(userId: db.auth.currentUser!.id),
+                      const SizedBox(height: 24),
+                    ],
+                    if (_organization != null) ...[
+                      Text(
+                        _organization!['name'] as String,
+                        style: Theme.of(context).textTheme.headlineSmall,
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'All booking times: $_zone',
+                        style: Theme.of(context).textTheme.bodyMedium,
                       ),
                       const SizedBox(height: 24),
                     ],
@@ -1048,13 +1589,18 @@ class _BookingHomeState extends State<BookingHome> {
                     ],
                     if (_organizations.isEmpty)
                       _message(
-                        'No organizations available',
-                        'Run the seed SQL, or ask an administrator '
-                        'to grant access to your organization.',
-                        action: OutlinedButton(
-                          onPressed: _loadOrganizations,
-                          child: const Text('Reload'),
-                        ),
+                        'Organization unavailable',
+                        'This link may be incorrect, the organization may be '
+                            'inactive, or you may need to sign in to access it.',
+                        action: db.auth.currentUser == null
+                            ? OutlinedButton(
+                                onPressed: _authenticate,
+                                child: const Text('Sign in'),
+                              )
+                            : OutlinedButton(
+                                onPressed: _loadOrganizations,
+                                child: const Text('Try again'),
+                              ),
                       )
                     else if (_tab == 0)
                       _searchView()
@@ -1066,6 +1612,134 @@ class _BookingHomeState extends State<BookingHome> {
             ),
           );
 
+// New welcome screen for signed-out visitors.
+if (!_loadingOrganizations &&
+    _organization == null &&
+    db.auth.currentUser == null &&
+    _signupContext != null) {
+  return OrganizationWelcome(
+    organizationName:
+        _signupContext!['organization_name'] as String? ??
+        'your community',
+    onSignIn: () => _authenticate(),
+    onCreateAccount: () => _authenticate(register: true),
+    onRetry: () => _loadOrganizations(),
+    photoAsset: 'assets/images/community_room.jpg',
+    error: _error,
+  );
+}
+
+    if (!_loadingOrganizations && _organization == null) {
+      final signedIn = db.auth.currentUser != null;
+
+      return Scaffold(
+        appBar: AppBar(title: const Text('Roomly')),
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 520),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.lock_outline, size: 48),
+                  const SizedBox(height: 16),
+                  Text(
+                    signedIn
+                        ? 'Membership required'
+                        : _signupContext != null
+                        ? 'Sign in or create an account'
+                        : 'Organization unavailable',
+                    style: Theme.of(context).textTheme.headlineSmall,
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    signedIn
+                        ? 'This account does not currently have access to this organization, '
+                              'or the organization is unavailable.'
+                        : _signupContext != null
+                        ? 'Create an account for ${_signupContext!["organization_name"]}, '
+                              'or sign in with an existing account.'
+                        : 'Sign in with an authorized account. Registration is not '
+                              'available at this link.',
+                    textAlign: TextAlign.center,
+                  ),
+                  if (_membershipNotice != null) ...[
+                    const SizedBox(height: 12),
+                    Text(_membershipNotice!, textAlign: TextAlign.center),
+                  ],
+                  if (_error != null) ...[
+                    const SizedBox(height: 12),
+                    Text(
+                      _error!,
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.error,
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: 24),
+                  Wrap(
+                    spacing: 12,
+                    runSpacing: 12,
+                    alignment: WrapAlignment.center,
+                    children: [
+                      OutlinedButton(
+                        onPressed: _loadOrganizations,
+                        child: const Text('Try again'),
+                      ),
+
+                      if (!signedIn)
+                        FilledButton(
+                          onPressed: () => _authenticate(),
+                          child: const Text('Sign in'),
+                        ),
+
+                      if (!signedIn && _signupContext != null)
+                        OutlinedButton(
+                          onPressed: () => _authenticate(register: true),
+                          child: const Text('Create account'),
+                        ),
+
+                      if (signedIn &&
+                          _signupContext != null &&
+                          _requestStatus == null)
+                        FilledButton(
+                          onPressed: _requestingMembership
+                              ? null
+                              : _requestMembership,
+                          child: Text(
+                            _requestingMembership
+                                ? 'Submitting…'
+                                : 'Request membership',
+                          ),
+                        ),
+
+                      if (signedIn)
+                        FilledButton(
+                          onPressed: () async {
+                            try {
+                              await db.auth.signOut();
+                            } catch (error) {
+                              if (!mounted) return;
+
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(content: Text(readableError(error))),
+                              );
+                            }
+                          },
+                          child: const Text('Sign out'),
+                        ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+    }
     return Scaffold(
       appBar: AppBar(
         title: const widgets.Row(
@@ -1077,16 +1751,65 @@ class _BookingHomeState extends State<BookingHome> {
           ],
         ),
         actions: [
+          if (db.auth.currentUser != null)
+            FutureBuilder<bool>(
+              future: db.rpc('rm_is_system_admin'),
+              builder: (context, snapshot) {
+                if (snapshot.data != true) {
+                  return const SizedBox.shrink();
+                }
+
+                return IconButton(
+                  tooltip: 'Platform dashboard',
+                  onPressed: () {
+                    context.push('/platform');
+                  },
+                  icon: const Icon(Icons.admin_panel_settings_outlined),
+                );
+              },
+            ),
           IconButton(
             tooltip: 'Switch light/dark appearance',
             onPressed: widget.toggleTheme,
             icon: const Icon(Icons.brightness_6_outlined),
           ),
+          IconButton(
+            tooltip: 'My bookings',
+            onPressed: () => _navigate(1),
+            icon: const Icon(Icons.event_note_outlined),
+          ),
+          if (_admin)
+            IconButton(
+              tooltip: 'Booking calendar',
+              onPressed: _openCalendar,
+              icon: const Icon(Icons.calendar_month_outlined),
+            ),
+          if (_admin)
+            IconButton(
+              tooltip: 'Manage rooms',
+              onPressed: _openRoomManagement,
+              icon: const Icon(Icons.meeting_room_outlined),
+            ),
+          if (_admin)
+            IconButton(
+              tooltip: 'Manage members',
+              onPressed: _openMemberManagement,
+              icon: const Icon(Icons.group_outlined),
+            ),
+          if (_admin)
+            IconButton(
+              tooltip: 'Add organization member',
+              onPressed: _openAddMember,
+              icon: const Icon(Icons.person_add_outlined),
+            ),
+          if (_admin)
+            IconButton(
+              tooltip: 'Organization profile',
+              onPressed: _openOrganizationProfile,
+              icon: const Icon(Icons.business_outlined),
+            ),
           if (db.auth.currentUser == null)
-            TextButton(
-              onPressed: _authenticate,
-              child: const Text('Sign in'),
-            )
+            TextButton(onPressed: _authenticate, child: const Text('Sign in'))
           else
             TextButton(
               onPressed: () async {
@@ -1142,32 +1865,75 @@ class _BookingHomeState extends State<BookingHome> {
 }
 
 class AuthDialog extends StatefulWidget {
-  const AuthDialog({super.key});
+  const AuthDialog({
+    super.key,
+    this.organizationId,
+    this.organizationName,
+    this.initialRegister = false,
+  });
+
+  final String? organizationId;
+  final String? organizationName;
+  final bool initialRegister;
 
   @override
   State<AuthDialog> createState() => _AuthDialogState();
 }
 
 class _AuthDialogState extends State<AuthDialog> {
+  final _fullName = TextEditingController();
+  final _contactPhone = TextEditingController();
   final _email = TextEditingController();
   final _password = TextEditingController();
-
   bool _register = false;
+  bool _joinOrganization = false;
   bool _busy = false;
-
   String? _error;
   String? _notice;
 
   @override
+  void initState() {
+    super.initState();
+    _register = widget.initialRegister;
+    _joinOrganization = _register && widget.organizationId != null;
+  }
+
+  @override
   void dispose() {
+    _fullName.dispose();
+    _contactPhone.dispose();
     _email.dispose();
     _password.dispose();
     super.dispose();
   }
 
+  void _toggleMode() {
+    if (_busy) return;
+    setState(() {
+      _register = !_register;
+      _error = null;
+      _notice = null;
+      if (_register) _joinOrganization = widget.organizationId != null;
+    });
+  }
+
   Future<void> _submit() async {
-    if (_email.text.trim().isEmpty || _password.text.isEmpty) {
+    if (_busy) return;
+    final email = _email.text.trim();
+    final password = _password.text;
+    final name = _fullName.text.trim();
+    final phone = _contactPhone.text.trim();
+
+    if (email.isEmpty || password.isEmpty) {
       setState(() => _error = 'Enter your email and password.');
+      return;
+    }
+    if (_register && (name.isEmpty || name.length > 200)) {
+      setState(() => _error = 'Enter your full name, up to 200 characters.');
+      return;
+    }
+    if (_register && phone.length > 50) {
+      setState(() => _error = 'Contact phone must be 50 characters or fewer.');
       return;
     }
 
@@ -1176,38 +1942,39 @@ class _AuthDialogState extends State<AuthDialog> {
       _error = null;
       _notice = null;
     });
-
     try {
       if (_register) {
         final response = await db.auth.signUp(
-          email: _email.text.trim(),
-          password: _password.text,
+          email: email,
+          password: password,
+          data: {
+            'full_name': name,
+            'contact_phone': phone,
+            if (_joinOrganization && widget.organizationId != null)
+              'requested_organization_id': widget.organizationId,
+          },
         );
-
         if (!mounted) return;
-
         if (response.session != null) {
           Navigator.pop(context);
           return;
         }
-
         setState(() {
           _busy = false;
           _register = false;
+          _password.clear();
           _notice =
-              'Check your email to confirm your account, then sign in.';
+              'Check your email for account confirmation, then return '
+              'to this organization link and sign in. Membership may require '
+              'administrator approval.';
         });
       } else {
-        await db.auth.signInWithPassword(
-          email: _email.text.trim(),
-          password: _password.text,
-        );
-
-        if (mounted) Navigator.pop(context);
+        await db.auth.signInWithPassword(email: email, password: password);
+        if (!mounted) return;
+        Navigator.pop(context);
       }
     } catch (error) {
       if (!mounted) return;
-
       setState(() {
         _busy = false;
         _error = readableError(error);
@@ -1217,96 +1984,144 @@ class _AuthDialogState extends State<AuthDialog> {
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
-      title: Text(_register ? 'Create your account' : 'Welcome back'),
-      content: SizedBox(
-        width: 400,
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              TextField(
-                controller: _email,
-                enabled: !_busy,
-                keyboardType: TextInputType.emailAddress,
-                autofillHints: const [AutofillHints.email],
-                decoration: const InputDecoration(
-                  labelText: 'Email',
+    return PopScope(
+      canPop: !_busy,
+      child: AlertDialog(
+        title: Text(_register ? 'Create your account' : 'Sign in'),
+        content: SizedBox(
+          width: 460,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (widget.organizationName != null) ...[
+                  Text(
+                    widget.organizationName!,
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                  const SizedBox(height: 16),
+                ],
+                if (_register) ...[
+                  TextField(
+                    controller: _fullName,
+                    enabled: !_busy,
+                    textCapitalization: TextCapitalization.words,
+                    autofillHints: const [AutofillHints.name],
+                    maxLength: 200,
+                    decoration: const InputDecoration(labelText: 'Full name'),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: _contactPhone,
+                    enabled: !_busy,
+                    keyboardType: TextInputType.phone,
+                    autofillHints: const [AutofillHints.telephoneNumber],
+                    maxLength: 50,
+                    decoration: const InputDecoration(
+                      labelText: 'Contact phone — optional',
+                      helperText: 'Contact information only; not a phone sign-in method.',
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                ],
+                TextField(
+                  controller: _email,
+                  enabled: !_busy,
+                  keyboardType: TextInputType.emailAddress,
+                  autocorrect: false,
+                  enableSuggestions: false,
+                  autofillHints: const [AutofillHints.email],
+                  decoration: const InputDecoration(labelText: 'Email'),
                 ),
-              ),
-              const SizedBox(height: 16),
-              TextField(
-                controller: _password,
-                enabled: !_busy,
-                obscureText: true,
-                decoration: const InputDecoration(
-                  labelText: 'Password',
+                const SizedBox(height: 16),
+                TextField(
+                  controller: _password,
+                  enabled: !_busy,
+                  obscureText: true,
+                  enableSuggestions: false,
+                  autocorrect: false,
+                  autofillHints: [
+                    _register
+                        ? AutofillHints.newPassword
+                        : AutofillHints.password,
+                  ],
+                  decoration: const InputDecoration(labelText: 'Password'),
+                  onSubmitted: (_) => _submit(),
                 ),
-                onSubmitted: (_) {
-                  if (!_busy) _submit();
-                },
-              ),
-              if (_notice != null) ...[
-                const SizedBox(height: 16),
-                Text(_notice!),
-              ],
-              if (_error != null) ...[
-                const SizedBox(height: 16),
-                Text(
-                  _error!,
-                  style: TextStyle(
-                    color: Theme.of(context).colorScheme.error,
+                if (_register && widget.organizationId != null) ...[
+                  const SizedBox(height: 12),
+                  CheckboxListTile(
+                    contentPadding: EdgeInsets.zero,
+                    controlAffinity: ListTileControlAffinity.leading,
+                    title: Text(
+                      'Join ${widget.organizationName ?? "this organization"}',
+                    ),
+                    subtitle: const Text(
+                      'Membership may require administrator approval. '
+                      'This does not grant administrator access.',
+                    ),
+                    value: _joinOrganization,
+                    onChanged: _busy
+                        ? null
+                        : (value) => setState(
+                            () => _joinOrganization = value ?? false,
+                          ),
+                  ),
+                ],
+                if (_notice != null) ...[
+                  const SizedBox(height: 16),
+                  Text(_notice!),
+                ],
+                if (_error != null) ...[
+                  const SizedBox(height: 16),
+                  Text(
+                    _error!,
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.error,
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 12),
+                TextButton(
+                  onPressed: _busy ? null : _toggleMode,
+                  child: Text(
+                    _register
+                        ? 'Already have an account? Sign in'
+                        : 'New here? Create an account',
                   ),
                 ),
+                if (_busy) ...[
+                  const SizedBox(height: 12),
+                  const LinearProgressIndicator(),
+                ],
               ],
-              const SizedBox(height: 12),
-              TextButton(
-                onPressed: _busy
-                    ? null
-                    : () {
-                        setState(() {
-                          _register = !_register;
-                          _error = null;
-                          _notice = null;
-                        });
-                      },
-                child: Text(
-                  _register
-                      ? 'Already have an account? Sign in'
-                      : 'New here? Create an account',
-                ),
-              ),
-            ],
+            ),
           ),
         ),
+        actions: [
+          TextButton(
+            onPressed: _busy ? null : () => Navigator.pop(context),
+            child: const Text('Close'),
+          ),
+          FilledButton(
+            onPressed: _busy ? null : _submit,
+            child: Text(
+              _busy
+                  ? 'Please wait…'
+                  : _register
+                  ? 'Create account'
+                  : 'Sign in',
+            ),
+          ),
+        ],
       ),
-      actions: [
-        TextButton(
-          onPressed: _busy ? null : () => Navigator.pop(context),
-          child: const Text('Close'),
-        ),
-        FilledButton(
-          onPressed: _busy ? null : _submit,
-          child: Text(
-            _busy
-                ? 'Please wait…'
-                : _register
-                    ? 'Create account'
-                    : 'Sign in',
-          ),
-        ),
-      ],
     );
   }
 }
 
 class BookingDialog extends StatefulWidget {
-  const BookingDialog({
-    super.key,
-    required this.room,
-    required this.criteria,
-  });
+  const BookingDialog({super.key, required this.room, required this.criteria});
 
   final Row room;
   final RoomSearch criteria;
@@ -1380,11 +2195,11 @@ class _BookingDialogState extends State<BookingDialog> {
         title: Text(
           success
               ? (_created!['status'] == 'pending'
-                  ? 'Booking requested'
-                  : 'Booking confirmed')
+                    ? 'Booking requested'
+                    : 'Booking confirmed')
               : _step == 0
-                  ? 'Room details'
-                  : 'Review your booking',
+              ? 'Room details'
+              : 'Review your booking',
         ),
         content: SizedBox(
           width: 480,
@@ -1420,9 +2235,7 @@ class _BookingDialogState extends State<BookingDialog> {
                   const SizedBox(height: 12),
                 ],
                 Text(
-                  '${money(success
-                      ? _created!['quoted_total_cents'] as num
-                      : widget.criteria.estimate(widget.room))}'
+                  '${money(success ? _created!['quoted_total_cents'] as num : widget.criteria.estimate(widget.room))}'
                   ' room rental',
                   style: Theme.of(context).textTheme.titleMedium,
                 ),
@@ -1436,11 +2249,11 @@ class _BookingDialogState extends State<BookingDialog> {
                 Text(
                   success
                       ? (_created!['status'] == 'pending'
-                          ? 'Your request is awaiting administrator approval.'
-                          : 'Your room is reserved.')
+                            ? 'Your request is awaiting administrator approval.'
+                            : 'Your room is reserved.')
                       : approval
-                          ? 'This room requires administrator approval.'
-                          : 'This room can be confirmed immediately.',
+                      ? 'This room requires administrator approval.'
+                      : 'This room can be confirmed immediately.',
                 ),
                 if (success) ...[
                   const SizedBox(height: 12),
@@ -1474,16 +2287,12 @@ class _BookingDialogState extends State<BookingDialog> {
               ]
             : [
                 TextButton(
-                  onPressed: _busy
-                      ? null
-                      : () => Navigator.pop(context, false),
+                  onPressed: _busy ? null : () => Navigator.pop(context, false),
                   child: const Text('Close'),
                 ),
                 if (_step == 1 && !_attempted)
                   TextButton(
-                    onPressed: _busy
-                        ? null
-                        : () => setState(() => _step = 0),
+                    onPressed: _busy ? null : () => setState(() => _step = 0),
                     child: const Text('Back'),
                   ),
                 FilledButton(
@@ -1510,10 +2319,10 @@ class _BookingDialogState extends State<BookingDialog> {
                     _busy
                         ? 'Saving…'
                         : _step == 0
-                            ? 'Review booking'
-                            : approval
-                                ? 'Submit request'
-                                : 'Confirm booking',
+                        ? 'Review booking'
+                        : approval
+                        ? 'Submit request'
+                        : 'Confirm booking',
                   ),
                 ),
               ],
