@@ -7,7 +7,7 @@ import 'package:uuid/uuid.dart';
 import 'package:flutter/widgets.dart' as widgets show Row;
 
 import 'package:go_router/go_router.dart';
-import 'package:flutter_web_plugins/url_strategy.dart';
+//import 'package:flutter_web_plugins/url_strategy.dart';
 
 import 'organization_welcome.dart';
 import 'admin_rooms_screen.dart';
@@ -147,7 +147,7 @@ class RoomSearch {
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  usePathUrlStrategy();
+  //usePathUrlStrategy();
   tzdata.initializeTimeZones();
 
   const url = String.fromEnvironment('SUPABASE_URL');
