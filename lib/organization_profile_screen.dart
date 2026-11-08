@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'roomly_logo.dart';
+
 class OrganizationProfileScreen extends StatefulWidget {
   const OrganizationProfileScreen({
     super.key,
@@ -176,7 +178,9 @@ class _OrganizationProfileScreenState
       canPop: !_saving,
       child: Scaffold(
         appBar: AppBar(
-          title: const Text('Organization profile'),
+          title: const RoomlyPageTitle(
+            title: 'Organization profile',
+          ),
         ),
         body: _loading
             ? const Center(

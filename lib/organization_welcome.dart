@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'roomly_logo.dart';
 
 class OrganizationWelcome extends StatelessWidget {
   const OrganizationWelcome({
@@ -28,17 +29,7 @@ class OrganizationWelcome extends StatelessWidget {
     return Scaffold(
       appBar: AppBar(
         backgroundColor: colors.surface,
-        title: const Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.meeting_room_outlined, color: teal),
-            SizedBox(width: 10),
-            Text(
-              'Roomly',
-              style: TextStyle(fontWeight: FontWeight.w700),
-            ),
-          ],
-        ),
+        title: const RoomlyLogo(),
       ),
       body: LayoutBuilder(
         builder: (context, viewport) {

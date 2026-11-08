@@ -4,6 +4,8 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'admin_rooms_screen.dart';
 import 'admin_calendar_screen.dart';
 
+import 'roomly_logo.dart';
+
 typedef PlatformRow = Map<String, dynamic>;
 SupabaseClient get _db => Supabase.instance.client;
 
@@ -96,7 +98,10 @@ class _PlatformOrganizationsScreenState extends State<PlatformOrganizationsScree
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Platform dashboard'), actions: [
+      appBar: AppBar(
+        title: const RoomlyPageTitle(
+          title: 'Platform dashboard', 
+          ), actions: [
         IconButton(tooltip: 'Reload', onPressed: _loading ? null : _load, icon: const Icon(Icons.refresh)),
       ]),
       floatingActionButton: FloatingActionButton.extended(
@@ -271,7 +276,10 @@ Future<void> _grant() async {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: Text('Administrators · ${widget.organizationName}'), actions: [
+    appBar: AppBar(
+      title: RoomlyPageTitle(
+        title: 'Administrators · ${widget.organizationName}',
+        ), actions: [
       IconButton(onPressed: _loading || _busy ? null : _load, icon: const Icon(Icons.refresh)),
     ]),
     floatingActionButton: FloatingActionButton.extended(

@@ -3,6 +3,7 @@ import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'admin_service.dart';
+import 'roomly_logo.dart';
 
 class AdminRoomsScreen extends StatefulWidget {
   const AdminRoomsScreen({
@@ -130,7 +131,9 @@ class _AdminRoomsScreenState extends State<AdminRoomsScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text('Rooms · ${widget.organizationName}'),
+        title: RoomlyPageTitle(
+          title: 'Rooms · ${widget.organizationName}',
+          ),
         actions: [
           IconButton(
             tooltip: 'Refresh rooms',

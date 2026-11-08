@@ -3,6 +3,7 @@ import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'admin_service.dart';
+import 'roomly_logo.dart';
 
 class AdminBookingDetailsScreen extends StatefulWidget {
   const AdminBookingDetailsScreen({
@@ -185,7 +186,9 @@ class _AdminBookingDetailsScreenState
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Booking details'),
+        title: const RoomlyPageTitle(
+          title: 'Booking details',
+        ),
       ),
       body: ListView(
         padding: const EdgeInsets.all(16),

@@ -20,6 +20,7 @@ import 'admin_members_screen.dart';
 
 import 'membership_status.dart';
 import 'add_member_dialog.dart';
+import 'roomly_logo.dart';
 
 typedef Row = Map<String, dynamic>;
 
@@ -1633,7 +1634,7 @@ if (!_loadingOrganizations &&
       final signedIn = db.auth.currentUser != null;
 
       return Scaffold(
-        appBar: AppBar(title: const Text('Roomly')),
+        appBar: AppBar(title: const RoomlyLogo()),
         body: Center(
           child: Padding(
             padding: const EdgeInsets.all(24),
@@ -1742,14 +1743,7 @@ if (!_loadingOrganizations &&
     }
     return Scaffold(
       appBar: AppBar(
-        title: const widgets.Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.meeting_room_outlined),
-            SizedBox(width: 8),
-            Text('Roomly'),
-          ],
-        ),
+      title: const RoomlyLogo(),
         actions: [
           if (db.auth.currentUser != null)
             FutureBuilder<bool>(

@@ -3,6 +3,7 @@ import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'admin_service.dart';
+import 'roomly_logo.dart';
 
 class AdminCreateBookingScreen extends StatefulWidget {
   const AdminCreateBookingScreen({
@@ -389,7 +390,9 @@ Widget _customerPicker() {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Create booking'),
+        title: const RoomlyPageTitle(
+          title: 'Create booking'
+        ),
       ),
       body: ListView(
         padding: const EdgeInsets.all(16),
