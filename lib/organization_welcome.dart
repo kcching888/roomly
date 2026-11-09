@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+
 import 'roomly_logo.dart';
+import 'roomly_customization.dart';
 
 class OrganizationWelcome extends StatelessWidget {
   const OrganizationWelcome({
@@ -8,16 +10,20 @@ class OrganizationWelcome extends StatelessWidget {
     required this.onSignIn,
     required this.onCreateAccount,
     required this.onRetry,
+    this.organizationId,
     this.error,
     this.photoAsset,
+    this.showCreateAccount = false,
   });
 
   final String organizationName;
   final VoidCallback onSignIn;
   final VoidCallback onCreateAccount;
   final VoidCallback onRetry;
+  final String? organizationId;
   final String? error;
   final String? photoAsset;
+  final bool showCreateAccount;
 
   static const teal = Color(0xFF01696F);
 
@@ -28,8 +34,11 @@ class OrganizationWelcome extends StatelessWidget {
 
     return Scaffold(
       appBar: AppBar(
+        toolbarHeight: 104,
         backgroundColor: colors.surface,
-        title: const RoomlyLogo(),
+        title: RmBrandTitle(
+          organizationId: organizationId,
+        ),
       ),
       body: LayoutBuilder(
         builder: (context, viewport) {
@@ -102,27 +111,31 @@ class OrganizationWelcome extends StatelessWidget {
                       ),
                     ),
                   ),
-                  OutlinedButton(
-                    onPressed: onCreateAccount,
-                    style: OutlinedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 26,
-                        vertical: 20,
+                  if (showCreateAccount)
+                    OutlinedButton(
+                      onPressed: onCreateAccount,
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 26,
+                          vertical: 20,
+                        ),
                       ),
+                      child: const Text('Create an account'),
                     ),
-                    child: const Text('Create an account'),
-                  ),
                 ],
               ),
               const SizedBox(height: 16),
-              Text(
-                'New here? Create an account to get started.\n'
-                'Organization membership may require approval.',
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: colors.onSurfaceVariant,
-                  height: 1.6,
-                ),
-              ),
+            Text(
+  showCreateAccount
+      ? 'New here? Create an account to get started.\n'
+          'Organization membership may require approval.'
+      : 'Sign in with your existing account.\n'
+          'For access, contact your organization administrator.',
+  style: theme.textTheme.bodySmall?.copyWith(
+    color: colors.onSurfaceVariant,
+    height: 1.6,
+  ),
+),
               if (error != null) ...[
                 const SizedBox(height: 24),
                 Container(

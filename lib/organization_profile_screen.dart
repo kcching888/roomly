@@ -2,12 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'roomly_logo.dart';
+import 'roomly_customization.dart';
+import 'canadian_time_zone_field.dart';
 
 class OrganizationProfileScreen extends StatefulWidget {
-  const OrganizationProfileScreen({
-    super.key,
-    required this.organizationId,
-  });
+  const OrganizationProfileScreen({super.key, required this.organizationId});
 
   final String organizationId;
 
@@ -16,8 +15,7 @@ class OrganizationProfileScreen extends StatefulWidget {
       _OrganizationProfileScreenState();
 }
 
-class _OrganizationProfileScreenState
-    extends State<OrganizationProfileScreen> {
+class _OrganizationProfileScreenState extends State<OrganizationProfileScreen> {
   final _db = Supabase.instance.client;
   final _formKey = GlobalKey<FormState>();
 
@@ -66,14 +64,10 @@ class _OrganizationProfileScreenState
     try {
       final result = await _db.rpc(
         'rm_admin_get_organization_profile',
-        params: {
-          'p_organization_id': widget.organizationId,
-        },
+        params: {'p_organization_id': widget.organizationId},
       );
 
-      final profile = Map<String, dynamic>.from(
-        result as Map,
-      );
+      final profile = Map<String, dynamic>.from(result as Map);
 
       if (!mounted) return;
 
@@ -178,149 +172,144 @@ class _OrganizationProfileScreenState
       canPop: !_saving,
       child: Scaffold(
         appBar: AppBar(
-          title: const RoomlyPageTitle(
+          title: RmBrandTitle(
+            organizationId: widget.organizationId,
             title: 'Organization profile',
           ),
         ),
         body: _loading
-            ? const Center(
-                child: CircularProgressIndicator(),
-              )
+            ? const Center(child: CircularProgressIndicator())
             : _timezone.isEmpty
-                ? Center(
-                    child: Padding(
-                      padding: const EdgeInsets.all(24),
+            ? Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        _error ?? 'Unable to load organization.',
+                        textAlign: TextAlign.center,
+                      ),
+                      const SizedBox(height: 12),
+                      OutlinedButton(
+                        onPressed: _loadProfile,
+                        child: const Text('Try again'),
+                      ),
+                    ],
+                  ),
+                ),
+              )
+            : SingleChildScrollView(
+                padding: const EdgeInsets.all(20),
+                child: Align(
+                  alignment: Alignment.topCenter,
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 720),
+                    child: Form(
+                      key: _formKey,
                       child: Column(
-                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            _error ?? 'Unable to load organization.',
-                            textAlign: TextAlign.center,
+                            'Organization details',
+                            style: Theme.of(context).textTheme.headlineSmall,
                           ),
-                          const SizedBox(height: 12),
-                          OutlinedButton(
-                            onPressed: _loadProfile,
-                            child: const Text('Try again'),
+                          const SizedBox(height: 8),
+                          const Text(
+                            'Update the name and contact information '
+                            'for this organization.',
+                          ),
+                          const SizedBox(height: 24),
+
+                          _field(
+                            controller: _name,
+                            label: 'Organization name',
+                            limit: 200,
+                            requiredField: true,
+                          ),
+                          _field(
+                            controller: _description,
+                            label: 'Description',
+                            limit: 2000,
+                            lines: 3,
+                          ),
+                          _field(
+                            controller: _email,
+                            label: 'Contact email',
+                            limit: 254,
+                            keyboardType: TextInputType.emailAddress,
+                          ),
+                          _field(
+                            controller: _phone,
+                            label: 'Phone',
+                            limit: 100,
+                            keyboardType: TextInputType.phone,
+                          ),
+                          _field(
+                            controller: _website,
+                            label: 'Website',
+                            limit: 500,
+                            keyboardType: TextInputType.url,
+                          ),
+                          _field(
+                            controller: _address,
+                            label: 'Address',
+                            limit: 2000,
+                            lines: 3,
+                          ),
+
+                          CanadianTimeZoneField(
+                            value: _timezone,
+                            enabled: false,
+                            onChanged: (_) {},
+                            helperText:
+                                'Managed by the platform administrator. '
+                                'Existing bookings keep their stored timestamps.',
+                          ),
+                          const SizedBox(height: 20),
+
+                          if (_error != null) ...[
+                            Text(
+                              _error!,
+                              style: TextStyle(
+                                color: Theme.of(context).colorScheme.error,
+                              ),
+                            ),
+                            const SizedBox(height: 16),
+                          ],
+
+                          FilledButton.icon(
+                            onPressed: _saving ? null : _saveProfile,
+                            icon: _saving
+                                ? const SizedBox(
+                                    width: 18,
+                                    height: 18,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                    ),
+                                  )
+                                : const Icon(Icons.save_outlined),
+                            label: Text(_saving ? 'Saving…' : 'Save profile'),
+                          ),
+                          OutlinedButton.icon(
+                            icon: const Icon(Icons.photo_library_outlined),
+                            label: const Text('Photos and branding'),
+                            onPressed: () {
+                              Navigator.of(context).push<void>(
+                                MaterialPageRoute<void>(
+                                  builder: (_) => RmOrganizationMediaScreen(
+                                    organizationId: widget.organizationId,
+                                  ),
+                                ),
+                              );
+                            },
                           ),
                         ],
                       ),
                     ),
-                  )
-                : SingleChildScrollView(
-                    padding: const EdgeInsets.all(20),
-                    child: Align(
-                      alignment: Alignment.topCenter,
-                      child: ConstrainedBox(
-                        constraints: const BoxConstraints(
-                          maxWidth: 720,
-                        ),
-                        child: Form(
-                          key: _formKey,
-                          child: Column(
-                            crossAxisAlignment:
-                                CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'Organization details',
-                                style: Theme.of(context)
-                                    .textTheme
-                                    .headlineSmall,
-                              ),
-                              const SizedBox(height: 8),
-                              const Text(
-                                'Update the name and contact information '
-                                'for this organization.',
-                              ),
-                              const SizedBox(height: 24),
-
-                              _field(
-                                controller: _name,
-                                label: 'Organization name',
-                                limit: 200,
-                                requiredField: true,
-                              ),
-                              _field(
-                                controller: _description,
-                                label: 'Description',
-                                limit: 2000,
-                                lines: 3,
-                              ),
-                              _field(
-                                controller: _email,
-                                label: 'Contact email',
-                                limit: 254,
-                                keyboardType:
-                                    TextInputType.emailAddress,
-                              ),
-                              _field(
-                                controller: _phone,
-                                label: 'Phone',
-                                limit: 100,
-                                keyboardType: TextInputType.phone,
-                              ),
-                              _field(
-                                controller: _website,
-                                label: 'Website',
-                                limit: 500,
-                                keyboardType: TextInputType.url,
-                              ),
-                              _field(
-                                controller: _address,
-                                label: 'Address',
-                                limit: 2000,
-                                lines: 3,
-                              ),
-
-                              InputDecorator(
-                                decoration: const InputDecoration(
-                                  labelText: 'Timezone',
-                                  border: OutlineInputBorder(),
-                                  helperText:
-                                      'Read-only in this version.',
-                                ),
-                                child: Text(_timezone),
-                              ),
-                              const SizedBox(height: 20),
-
-                              if (_error != null) ...[
-                                Text(
-                                  _error!,
-                                  style: TextStyle(
-                                    color: Theme.of(context)
-                                        .colorScheme
-                                        .error,
-                                  ),
-                                ),
-                                const SizedBox(height: 16),
-                              ],
-
-                              FilledButton.icon(
-                                onPressed:
-                                    _saving ? null : _saveProfile,
-                                icon: _saving
-                                    ? const SizedBox(
-                                        width: 18,
-                                        height: 18,
-                                        child:
-                                            CircularProgressIndicator(
-                                          strokeWidth: 2,
-                                        ),
-                                      )
-                                    : const Icon(
-                                        Icons.save_outlined,
-                                      ),
-                                label: Text(
-                                  _saving
-                                      ? 'Saving…'
-                                      : 'Save profile',
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
                   ),
+                ),
+              ),
       ),
     );
   }

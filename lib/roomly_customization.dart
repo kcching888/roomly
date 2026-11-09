@@ -95,7 +95,7 @@ class RmBrandTitle extends StatelessWidget {
   final String? title;
   @override
   Widget build(BuildContext context) {
-    final height = title == null ? 43.2 : 33.6;
+    final height = title == null ? 86.4 : 67.2;
     final logo = organizationId == null ? RmAppLogo(height: height)
       : RmMediaImage(organizationId: organizationId!, kind: 'logo',
           fit: BoxFit.contain, height: height, width: height * 3,
@@ -303,16 +303,64 @@ class RmSlugButton extends StatefulWidget {
 class _RmSlugButtonState extends State<RmSlugButton> {
   bool busy = false;
   Future<void> edit() async {
-    final controller = TextEditingController(text: widget.currentSlug);
-    String? value;
+  if (busy) return;
+
+  setState(() => busy = true);
+
+  String currentSlug;
+
+  try {
+    final result = await _db.rpc(
+      'rm_system_get_org_slug',
+      params: {
+        'p_organization_id': widget.organizationId,
+      },
+    );
+
+    currentSlug = result as String? ?? '';
+  } catch (e) {
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(_message(e))),
+      );
+    }
+    return;
+  } finally {
+    if (mounted) {
+      setState(() => busy = false);
+    }
+  }
+
+  if (!mounted) return;
+
+  final controller = TextEditingController(
+    text: currentSlug,
+  );
+        String? value;
+
     try {
-      final approved = await _confirm(context, 'Edit organization booking URL',
-        TextField(controller: controller, maxLength: 80,
-          decoration: const InputDecoration(labelText: 'Booking slug',
-            helperText: 'Old links remain valid. Use letters, numbers and hyphens.')));
+      final approved = await _confirm(
+        context,
+        'Edit organization booking URL',
+        TextField(
+          controller: controller,
+          maxLength: 80,
+          decoration: const InputDecoration(
+            labelText: 'Booking slug',
+            helperText:
+                'Current value is prefilled. '
+                'Previous booking links remain reserved.',
+            helperMaxLines: 3,
+          ),
+        ),
+      );
+
       if (!approved) return;
+
       value = controller.text.trim().toLowerCase();
-    } finally {controller.dispose();}
+    } finally {
+      controller.dispose();
+    }
     if (!mounted) return;
     final input = value ?? '';
     if (!RegExp(r'^[a-z0-9]+(-[a-z0-9]+)*$').hasMatch(input) ||

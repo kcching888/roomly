@@ -4,6 +4,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'admin_service.dart';
 import 'roomly_logo.dart';
+import 'roomly_customization.dart';
 
 class AdminRoomsScreen extends StatefulWidget {
   const AdminRoomsScreen({
@@ -131,7 +132,8 @@ class _AdminRoomsScreenState extends State<AdminRoomsScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: RoomlyPageTitle(
+        title: RmBrandTitle(
+          organizationId: widget.organizationId,
           title: 'Rooms · ${widget.organizationName}',
           ),
         actions: [

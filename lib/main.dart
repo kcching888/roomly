@@ -9,7 +9,6 @@ import 'package:flutter/widgets.dart' as widgets show Row;
 import 'package:go_router/go_router.dart';
 //import 'package:flutter_web_plugins/url_strategy.dart';
 
-import 'organization_welcome.dart';
 import 'admin_rooms_screen.dart';
 import 'admin_calendar_screen.dart';
 import 'admin_booking_details_screen.dart';
@@ -17,11 +16,12 @@ import 'organization_profile_screen.dart';
 import 'platform_organizations_screen.dart';
 import 'admin_members_screen.dart';
 
-
+import 'organization_welcome.dart';
 import 'membership_status.dart';
 import 'add_member_dialog.dart';
 import 'roomly_logo.dart';
 import 'roomly_customization.dart';
+import 'platform_access_gate.dart';
 
 typedef Row = Map<String, dynamic>;
 
@@ -282,7 +282,7 @@ class _RoomlyAppState extends State<RoomlyApp> {
       GoRoute(
         path: '/platform',
         builder: (context, state) {
-          return const PlatformOrganizationsScreen();
+          return const PlatformAccessGate();
         },
       ),
     ],
@@ -338,6 +338,7 @@ class _BookingHomeState extends State<BookingHome> {
   List<Row> _organizations = [];
   Row? _organization;
   Row? _signupContext;
+  Map<String, dynamic>? _publicBranding;
   String? _membershipNotice;
   int _loadRequest = 0;
   bool _requestingMembership = false;
@@ -376,66 +377,112 @@ class _BookingHomeState extends State<BookingHome> {
   }
 
   Future<void> _loadOrganizations() async {
-    final request = ++_loadRequest;
-    ++_organizationRequest;
+  final request = ++_loadRequest;
+  ++_organizationRequest;
+
+  setState(() {
+    _loadingOrganizations = true;
+    _error = null;
+    _membershipNotice = null;
+    _signupContext = null;
+    _organizations = [];
+    _organization = null;
+    _admin = false;
+    _tab = 0;
+    _results = null;
+    _searched = null;
+    _bookings = null;
+    _publicBranding = null;
+  });
+
+  try {
+    // Load public branding independently of registration availability.
+    final brandingResult = await db.rpc(
+      'rm_public_branding',
+      params: {
+        'p_slug': widget.organizationSlug,
+      },
+    );
+
+    if (!mounted || request != _loadRequest) return;
+
+    final branding = brandingResult == null
+        ? null
+        : Map<String, dynamic>.from(brandingResult as Map);
+
+    // An old booking slug can resolve to the current slug.
+    final canonicalSlug =
+        branding?['slug'] as String? ?? widget.organizationSlug;
+
     setState(() {
-      _loadingOrganizations = true;
-      _error = null;
-      _membershipNotice = null;
-      _signupContext = null;
-      _organizations = [];
-      _organization = null;
-      _admin = false;
-      _tab = 0;
-      _results = null;
-      _searched = null;
-      _bookings = null;
+      _publicBranding = branding;
     });
 
-    try {
-      final signupResult = await db.rpc(
-        'rm_get_signup_context',
-        params: {'p_slug': widget.organizationSlug},
+    // This remains null when registration is disabled.
+    final signupResult = await db.rpc(
+      'rm_get_signup_context',
+      params: {
+        'p_slug': canonicalSlug,
+      },
+    );
+
+    if (!mounted || request != _loadRequest) return;
+
+    setState(() {
+      _signupContext = signupResult == null
+          ? null
+          : Map<String, dynamic>.from(signupResult as Map);
+    });
+
+    // Preserve the existing membership-completion behavior.
+    if (db.auth.currentSession != null) {
+      final result = await db.rpc(
+        'rm_complete_signup_membership',
       );
-      if (!mounted || request != _loadRequest) return;
-      setState(() {
-        _signupContext = signupResult == null
-            ? null
-            : Map<String, dynamic>.from(signupResult as Map);
-      });
 
-      if (db.auth.currentSession != null) {
-        final result = await db.rpc('rm_complete_signup_membership');
-        if (!mounted || request != _loadRequest) return;
-        final notice = result as String?;
-        setState(() {
-          _membershipNotice =
-              notice == 'No organization membership was requested.'
-              ? null
-              : notice;
-        });
-      }
+      if (!mounted || request != _loadRequest) return;
 
-      final data = await db
-          .from('rm_organizations')
-          .select()
-          .eq('slug', widget.organizationSlug)
-          .limit(1);
-      if (!mounted || request != _loadRequest) return;
-      setState(() => _organizations = rows(data));
-      if (_organizations.isNotEmpty) {
-        await _selectOrganization(_organizations.first);
-      }
-      if (!mounted || request != _loadRequest) return;
-      setState(() => _loadingOrganizations = false);
-    } catch (error) {
-      if (!mounted || request != _loadRequest) return;
+      final notice = result as String?;
+
       setState(() {
-        _loadingOrganizations = false;
-        _error = readableError(error);
+        _membershipNotice =
+            notice == 'No organization membership was requested.'
+                ? null
+                : notice;
       });
     }
+
+    // Preserve the existing RLS-protected organization lookup.
+    final data = await db
+        .from('rm_organizations')
+        .select()
+        .eq('slug', canonicalSlug)
+        .limit(1);
+
+    if (!mounted || request != _loadRequest) return;
+
+    setState(() {
+      _organizations = rows(data);
+    });
+
+    if (_organizations.isNotEmpty) {
+      await _selectOrganization(_organizations.first);
+    }
+
+    if (!mounted || request != _loadRequest) return;
+
+    setState(() {
+      _loadingOrganizations = false;
+    });
+  } catch (error) {
+    if (!mounted || request != _loadRequest) return;
+
+    setState(() {
+      _loadingOrganizations = false;
+      _error = readableError(error);
+    });
   }
+}
 
   Future<void> _selectOrganization(Row organization) async {
     final request = ++_organizationRequest;
@@ -1621,11 +1668,14 @@ class _BookingHomeState extends State<BookingHome> {
 if (!_loadingOrganizations &&
     _organization == null &&
     db.auth.currentUser == null &&
-    _signupContext != null) {
+    _publicBranding != null) {
   return OrganizationWelcome(
+    organizationId:
+        _publicBranding!['organization_id'] as String?,
     organizationName:
-        _signupContext!['organization_name'] as String? ??
-        'your community',
+        _publicBranding!['organization_name'] as String? ??
+        'your organization',
+    showCreateAccount: _signupContext != null,
     onSignIn: () => _authenticate(),
     onCreateAccount: () => _authenticate(register: true),
     onRetry: () => _loadOrganizations(),
@@ -1638,7 +1688,12 @@ if (!_loadingOrganizations &&
       final signedIn = db.auth.currentUser != null;
 
       return Scaffold(
-        appBar: AppBar(title: const RoomlyLogo()),
+        appBar: AppBar(
+        toolbarHeight: 104,
+        title: RmBrandTitle(
+          organizationId: _signupContext?['organization_id'] as String?,
+        ),
+      ),
         body: Center(
           child: Padding(
             padding: const EdgeInsets.all(24),
@@ -1747,8 +1802,12 @@ if (!_loadingOrganizations &&
     }
     return Scaffold(
       appBar: AppBar(
-      title: const RoomlyLogo(),
-        actions: [
+        toolbarHeight: 104,
+        title: RmBrandTitle(
+          organizationId: _organization?['id'] as String?,
+        ),
+      
+    actions: [
           if (db.auth.currentUser != null)
             FutureBuilder<bool>(
               future: db.rpc('rm_is_system_admin'),

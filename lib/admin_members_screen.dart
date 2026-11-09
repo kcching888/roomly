@@ -3,6 +3,7 @@ import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'roomly_logo.dart';
+import 'roomly_customization.dart';
 
 typedef MemberRow = Map<String, dynamic>;
 typedef RequestRow = Map<String, dynamic>;
@@ -287,7 +288,8 @@ class _AdminMembersScreenState extends State<AdminMembersScreen> {
       length: 2,
       child: Scaffold(
         appBar: AppBar(
-          title: RoomlyPageTitle(
+          title: RmBrandTitle(
+            organizationId: widget.organizationId,
             title: 'Members · ${widget.organizationName}',
           ),
         

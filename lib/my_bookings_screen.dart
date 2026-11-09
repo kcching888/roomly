@@ -3,6 +3,7 @@ import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'roomly_logo.dart';
+import 'roomly_customization.dart';
 
 class MyBookingsScreen extends StatefulWidget {
   const MyBookingsScreen({super.key});
@@ -249,7 +250,8 @@ class _MyBookingsScreenState extends State<MyBookingsScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const RoomlyPageTitle(
+        title: RmBrandTitle(
+          organizationId: widget.organizationId,
           title: 'My bookings',
           ),
         actions: [

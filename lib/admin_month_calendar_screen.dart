@@ -4,6 +4,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:timezone/timezone.dart' as tz;
 
 import 'roomly_logo.dart';
+import 'roomly_customization.dart';
 
 class AdminMonthCalendarScreen extends StatefulWidget {
   const AdminMonthCalendarScreen({
@@ -307,7 +308,8 @@ class _AdminMonthCalendarScreenState
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const RoomlyPageTitle(
+        title: RmBrandTitle(
+          organizationId: widget.organizationId,
           title: 'Monthly bookings',
         ),
         actions: [
