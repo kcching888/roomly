@@ -8,7 +8,20 @@ const supabase = createClient(
 const mailtrapToken = Deno.env.get("MAILTRAP_API_TOKEN")!;
 const fromEmail = Deno.env.get("MAILTRAP_FROM_EMAIL")!;
 const fromName = Deno.env.get("MAILTRAP_FROM_NAME") ?? "Roomly";
-const appUrl = Deno.env.get("ROOMLY_APP_URL") ?? "http://localhost:3000";
+const appUrl =
+  Deno.env.get("ROOMLY_APP_URL") ?? "http://localhost:3000";
+
+const webhookSecret = Deno.env.get("NOTIFICATION_WEBHOOK_SECRET");
+
+function unauthorized() {
+  return new Response(
+    JSON.stringify({ error: "Unauthorized" }),
+    {
+      status: 401,
+      headers: { "Content-Type": "application/json" },
+    },
+  );
+}
 
 function bookingTime(value: string, timezone: string) {
   return new Intl.DateTimeFormat("en-CA", {
@@ -18,7 +31,10 @@ function bookingTime(value: string, timezone: string) {
   }).format(new Date(value));
 }
 
-function subjectFor(eventType: string, payload: Record<string, unknown>) {
+function subjectFor(
+  eventType: string,
+  payload: Record<string, unknown>,
+) {
   const organization = payload.organization_name ?? "Roomly";
 
   switch (eventType) {
@@ -45,17 +61,22 @@ function subjectFor(eventType: string, payload: Record<string, unknown>) {
   }
 }
 
-function bodyFor(eventType: string, payload: Record<string, unknown>) {
+function bodyFor(
+  eventType: string,
+  payload: Record<string, unknown>,
+) {
   const organization = payload.organization_name ?? "Roomly";
   const room = payload.room_name ?? "your reserved room";
   const title = payload.booking_title ?? "Your booking";
   const startsAt = payload.starts_at as string | undefined;
   const endsAt = payload.ends_at as string | undefined;
-  const timezone = (payload.timezone as string | undefined) ?? "America/Edmonton";
+  const timezone =
+    (payload.timezone as string | undefined) ?? "America/Edmonton";
 
-  const schedule = startsAt && endsAt
-    ? `<p><strong>${bookingTime(startsAt, timezone)}</strong> to <strong>${bookingTime(endsAt, timezone)}</strong></p>`
-    : "";
+  const schedule =
+    startsAt && endsAt
+      ? `<p><strong>${bookingTime(startsAt, timezone)}</strong> to <strong>${bookingTime(endsAt, timezone)}</strong></p>`
+      : "";
 
   switch (eventType) {
     case "membership_request_submitted":
@@ -159,59 +180,90 @@ async function sendEmail(
 
   if (!response.ok) {
     const detail = await response.text();
-    throw new Error(`Mailtrap request failed: ${response.status} ${detail}`);
-  }
-}
-
-const { data: queued, error: queueError } = await supabase
-  .from("rm_notification_queue")
-  .select("*")
-  .eq("status", "queued")
-  .order("created_at")
-  .limit(25);
-
-if (queueError) {
-  return new Response(JSON.stringify({ error: queueError.message }), {
-    status: 500,
-  });
-}
-
-let sent = 0;
-let failed = 0;
-
-for (const notification of queued ?? []) {
-  try {
-    await sendEmail(
-      notification.recipient_email,
-      notification.event_type,
-      notification.payload ?? {},
+    throw new Error(
+      `Mailtrap request failed: ${response.status} ${detail}`,
     );
-
-    await supabase
-      .from("rm_notification_queue")
-      .update({
-        status: "sent",
-        sent_at: new Date().toISOString(),
-        last_error: null,
-      })
-      .eq("id", notification.id);
-
-    sent += 1;
-  } catch (error) {
-    await supabase
-      .from("rm_notification_queue")
-      .update({
-        status: "failed",
-        attempts: (notification.attempts ?? 0) + 1,
-        last_error: error instanceof Error ? error.message : String(error),
-      })
-      .eq("id", notification.id);
-
-    failed += 1;
   }
 }
 
-return new Response(
-  JSON.stringify({ queued: queued?.length ?? 0, sent, failed }),
-  { headers: { "Content-Type": "application/json" } },
-);
+Deno.serve(async (req) => {
+  const webhookSecret = Deno.env.get("NOTIFICATION_WEBHOOK_SECRET");
+
+  if (
+    req.method !== "POST" ||
+    !webhookSecret ||
+    req.headers.get("x-webhook-secret") !== webhookSecret
+  ) {
+    return new Response(
+      JSON.stringify({ error: "Unauthorized" }),
+      {
+        status: 401,
+        headers: { "Content-Type": "application/json" },
+      },
+    );
+  }
+
+  const { data: queued, error: queueError } = await supabase
+    .from("rm_notification_queue")
+    .select()
+    .eq("status", "queued")
+    .order("created_at")
+    .limit(25);
+
+  if (queueError) {
+    return new Response(
+      JSON.stringify({ error: queueError.message }),
+      {
+        status: 500,
+        headers: { "Content-Type": "application/json" },
+      },
+    );
+  }
+
+  let sent = 0;
+  let failed = 0;
+
+  for (const notification of queued ?? []) {
+    try {
+      await sendEmail(
+        notification.recipient_email,
+        notification.event_type,
+        notification.payload ?? {},
+      );
+
+      await supabase
+        .from("rm_notification_queue")
+        .update({
+          status: "sent",
+          sent_at: new Date().toISOString(),
+          last_error: null,
+        })
+        .eq("id", notification.id);
+
+      sent += 1;
+    } catch (error) {
+      await supabase
+        .from("rm_notification_queue")
+        .update({
+          status: "failed",
+          attempts: (notification.attempts ?? 0) + 1,
+          last_error:
+            error instanceof Error ? error.message : String(error),
+        })
+        .eq("id", notification.id);
+
+      failed += 1;
+    }
+  }
+
+  return new Response(
+    JSON.stringify({
+      queued: queued?.length ?? 0,
+      sent,
+      failed,
+    }),
+    {
+      headers: { "Content-Type": "application/json" },
+    },
+  );
+});
