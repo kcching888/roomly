@@ -171,11 +171,12 @@ class _MembershipStatusState extends State<MembershipStatus> {
                               'Organization details unavailable',
                         ),
                         subtitle: Text(
-                          'Role: ${membership['role']}\n'
-                          'Organization ID: '
-                          '${membership['organization_id']}',
+                          membership['role'] == 'admin'
+                              ? 'Role: ${membership['role']}\n'
+                                  'Organization ID: ${membership['organization_id']}'
+                              : 'Role: ${membership['role']}',
                         ),
-                        isThreeLine: true,
+                        isThreeLine: membership['role'] == 'admin',
                       ),
                   ],
                 );

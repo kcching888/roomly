@@ -3,6 +3,7 @@ import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:timezone/timezone.dart' as tz;
 
+import 'admin_service.dart';
 import 'roomly_logo.dart';
 import 'roomly_customization.dart';
 
@@ -13,12 +14,14 @@ class AdminMonthCalendarScreen extends StatefulWidget {
     required this.organizationName,
     required this.timezone,
     required this.initialDay,
+    this.onBookingSelected,
   });
 
   final String organizationId;
   final String organizationName;
   final String timezone;
   final DateTime initialDay;
+  final ValueChanged<Map<String, dynamic>>? onBookingSelected;
 
   @override
   State<AdminMonthCalendarScreen> createState() =>
@@ -140,6 +143,90 @@ class _AdminMonthCalendarScreenState
     _loadMonth();
   }
 
+  bool _openingDay = false;
+
+  Future<void> _selectDay(DateTime day) async {
+    if (_openingDay) return;
+    if (widget.onBookingSelected == null) {
+      Navigator.pop<DateTime>(context, day);
+      return;
+    }
+    _openingDay = true;
+    try {
+      final schedule = await AdminService(_db).daySchedule(
+        organizationId: widget.organizationId,
+        day: day,
+      );
+      final bookings = schedule.where((row) => row['booking_id'] != null).toList()
+        ..sort((a, b) => DateTime.parse(a['booking_starts_at'] as String)
+            .compareTo(DateTime.parse(b['booking_starts_at'] as String)));
+      if (!mounted) return;
+      if (bookings.isEmpty) {
+        Navigator.pop<DateTime>(context, day);
+        return;
+      }
+      final selected = await showModalBottomSheet<Map<String, dynamic>>(
+        context: context,
+        isScrollControlled: true,
+        builder: (sheetContext) => SafeArea(
+          child: SizedBox(
+            height: MediaQuery.sizeOf(sheetContext).height * 0.65,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Text(
+                    'Choose a booking · ${DateFormat.MMMd().format(day)}',
+                    style: Theme.of(sheetContext).textTheme.titleLarge,
+                  ),
+                ),
+                Expanded(
+                  child: ListView.separated(
+                    itemCount: bookings.length,
+                    separatorBuilder: (_, __) => const Divider(height: 1),
+                    itemBuilder: (_, index) {
+                      final booking = bookings[index];
+                      final start = tz.TZDateTime.from(
+                        DateTime.parse(booking['booking_starts_at'] as String),
+                        tz.getLocation(widget.timezone),
+                      );
+                      final end = tz.TZDateTime.from(
+                        DateTime.parse(booking['booking_ends_at'] as String),
+                        tz.getLocation(widget.timezone),
+                      );
+                      return ListTile(
+                        title: Text('${booking['booking_title']}'),
+                        subtitle: Text(
+                          "${booking['room_name']}\n"
+                          '${DateFormat.jm().format(start)} – ${DateFormat.jm().format(end)}',
+                        ),
+                        isThreeLine: true,
+                        trailing: const Icon(Icons.chevron_right),
+                        onTap: () => Navigator.pop(sheetContext, booking),
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+      if (!mounted || selected == null) return;
+      widget.onBookingSelected?.call(selected);
+      Navigator.pop<DateTime>(context, day);
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not load bookings: $error')),
+        );
+      }
+    } finally {
+      _openingDay = false;
+    }
+  }
+
   Widget _dayCell(DateTime day, {required bool compact}) {
     final scheme = Theme.of(context).colorScheme;
     final data = _days[_dateKey(day)];
@@ -175,9 +262,7 @@ class _AdminMonthCalendarScreenState
         ),
         clipBehavior: Clip.antiAlias,
         child: InkWell(
-          onTap: () {
-            Navigator.pop<DateTime>(context, day);
-          },
+          onTap: () => _selectDay(day),
           child: Padding(
             padding: EdgeInsets.all(compact ? 5 : 10),
             child: Column(
@@ -360,7 +445,7 @@ class _AdminMonthCalendarScreenState
             const SizedBox(height: 4),
             Text(
               'Event counts · ${widget.timezone}\n'
-              'Tap a date to open its day schedule. '
+              'Tap a date, then choose a booking to locate it. '
               'On small screens, “p” means pending.',
               style: Theme.of(context).textTheme.bodySmall,
             ),

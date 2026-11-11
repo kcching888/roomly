@@ -191,29 +191,138 @@ class _RoomlyAppState extends State<RoomlyApp> {
   ThemeMode _mode = ThemeMode.system;
 
   ThemeData _theme(Brightness brightness) {
-    final scheme = ColorScheme.fromSeed(
-      seedColor: const Color(0xFF01696F),
-      brightness: brightness,
-    );
+  final scheme = ColorScheme.fromSeed(
+    seedColor: const Color(0xFF01696F),
+    brightness: brightness,
+  );
 
-    return ThemeData(
-      useMaterial3: true,
-      colorScheme: scheme,
-      scaffoldBackgroundColor: brightness == Brightness.light
-          ? const Color(0xFFF7F6F2)
-          : const Color(0xFF171614),
-      inputDecorationTheme: const InputDecorationTheme(
-        border: OutlineInputBorder(),
-        contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+  final baseTheme = ThemeData(
+    useMaterial3: true,
+    brightness: brightness,
+    colorScheme: scheme,
+  );
+
+  return baseTheme.copyWith(
+    scaffoldBackgroundColor: brightness == Brightness.light
+        ? const Color(0xFFF7F6F2)
+        : const Color(0xFF171614),
+
+    // Keep the base theme's light/dark text colors.
+    textTheme: baseTheme.textTheme.copyWith(
+      headlineSmall: baseTheme.textTheme.headlineSmall?.copyWith(
+        fontSize: 26,
+        height: 1.25,
+        fontWeight: FontWeight.w600,
       ),
-      filledButtonTheme: FilledButtonThemeData(
-        style: FilledButton.styleFrom(minimumSize: const Size(44, 48)),
+      titleLarge: baseTheme.textTheme.titleLarge?.copyWith(
+        fontSize: 22,
+        height: 1.3,
+        fontWeight: FontWeight.w600,
       ),
-      outlinedButtonTheme: OutlinedButtonThemeData(
-        style: OutlinedButton.styleFrom(minimumSize: const Size(44, 48)),
+      titleMedium: baseTheme.textTheme.titleMedium?.copyWith(
+        fontSize: 18,
+        height: 1.4,
+        fontWeight: FontWeight.w600,
       ),
-    );
-  }
+      titleSmall: baseTheme.textTheme.titleSmall?.copyWith(
+        fontSize: 16,
+        height: 1.4,
+        fontWeight: FontWeight.w600,
+      ),
+      bodyLarge: baseTheme.textTheme.bodyLarge?.copyWith(
+        fontSize: 18,
+        height: 1.5,
+      ),
+      bodyMedium: baseTheme.textTheme.bodyMedium?.copyWith(
+        fontSize: 16,
+        height: 1.5,
+      ),
+      bodySmall: baseTheme.textTheme.bodySmall?.copyWith(
+        fontSize: 14,
+        height: 1.45,
+      ),
+      labelLarge: baseTheme.textTheme.labelLarge?.copyWith(
+        fontSize: 16,
+        height: 1.25,
+        fontWeight: FontWeight.w600,
+      ),
+      labelMedium: baseTheme.textTheme.labelMedium?.copyWith(
+        fontSize: 14,
+        height: 1.3,
+      ),
+      labelSmall: baseTheme.textTheme.labelSmall?.copyWith(
+        fontSize: 12,
+        height: 1.3,
+      ),
+    ),
+
+    inputDecorationTheme: const InputDecorationTheme(
+      border: OutlineInputBorder(),
+      contentPadding: EdgeInsets.symmetric(
+        horizontal: 16,
+        vertical: 18,
+      ),
+      labelStyle: TextStyle(fontSize: 16),
+      floatingLabelStyle: TextStyle(fontSize: 16),
+      hintStyle: TextStyle(fontSize: 16),
+      helperStyle: TextStyle(
+        fontSize: 14,
+        height: 1.4,
+      ),
+      errorStyle: TextStyle(
+        fontSize: 14,
+        height: 1.4,
+      ),
+      helperMaxLines: 3,
+      errorMaxLines: 3,
+    ),
+
+    filledButtonTheme: FilledButtonThemeData(
+      style: FilledButton.styleFrom(
+        minimumSize: const Size(48, 52),
+        padding: const EdgeInsets.symmetric(
+          horizontal: 20,
+          vertical: 14,
+        ),
+        textStyle: const TextStyle(
+          fontSize: 16,
+          height: 1.25,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+    ),
+
+    outlinedButtonTheme: OutlinedButtonThemeData(
+      style: OutlinedButton.styleFrom(
+        minimumSize: const Size(48, 52),
+        padding: const EdgeInsets.symmetric(
+          horizontal: 20,
+          vertical: 14,
+        ),
+        textStyle: const TextStyle(
+          fontSize: 16,
+          height: 1.25,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+    ),
+
+    textButtonTheme: TextButtonThemeData(
+      style: TextButton.styleFrom(
+        minimumSize: const Size(48, 48),
+        padding: const EdgeInsets.symmetric(
+          horizontal: 16,
+          vertical: 12,
+        ),
+        textStyle: const TextStyle(
+          fontSize: 16,
+          height: 1.25,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+    ),
+  );
+}
 
   @override
   Widget build(BuildContext context) {
@@ -1151,60 +1260,93 @@ class _BookingHomeState extends State<BookingHome> {
   }
 
   Widget _roomCard(Row room, RoomSearch criteria) {
-    final approval = room['requires_approval'] == true;
+  final approval = room['requires_approval'] == true;
 
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              room['name'] as String,
-              style: Theme.of(context).textTheme.titleLarge,
-            ),
-            const SizedBox(height: 8),
-            Text(room['location'] as String),
-            const SizedBox(height: 12),
-            Text(room['description'] as String),
-            const SizedBox(height: 16),
-            Text('Up to ${room['capacity']} guests'),
-            const SizedBox(height: 8),
-            Wrap(
-              spacing: 8,
-              runSpacing: 4,
-              children: (room['amenities'] as List)
-                  .map((item) => Chip(label: Text('$item')))
-                  .toList(),
-            ),
-            const SizedBox(height: 12),
-            Text('${money(room['hourly_rate_cents'] as num)} / hour'),
-            const SizedBox(height: 4),
-            Text(
-              '${money(criteria.estimate(room))} estimated room rental',
-              style: Theme.of(context).textTheme.titleMedium,
-            ),
-            const SizedBox(height: 8),
-            Text(
-              approval
-                  ? 'Administrator approval required'
-                  : 'Instant confirmation',
-            ),
-            const SizedBox(height: 16),
-            OutlinedButton.icon(
-              onPressed: () => _chooseRoom(room, criteria),
-              icon: const Icon(Icons.arrow_forward),
-              label: Text(
-                db.auth.currentUser == null
-                    ? 'Sign in to choose'
-                    : 'Choose room',
-              ),
-            ),
-          ],
+  return Card(
+    clipBehavior: Clip.antiAlias,
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        RmMediaImage(
+          organizationId: criteria.organizationId,
+          kind: 'room',
+          roomId: room['id'] as String,
+          height: 180,
+          width: double.infinity,
+          fit: BoxFit.cover,
+          fallback: Container(
+            color: Theme.of(context).colorScheme.surfaceContainerHighest,
+            alignment: Alignment.center,
+            child: const Icon(Icons.meeting_room_outlined, size: 48),
+          ),
         ),
-      ),
-    );
-  }
+        Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                room['name'] as String,
+                style: Theme.of(context).textTheme.titleLarge,
+              ),
+              const SizedBox(height: 8),
+              Text(
+  room['location'] as String,
+  style: Theme.of(context).textTheme.bodyMedium,
+),
+              const SizedBox(height: 12),
+              Text(
+  room['description'] as String,
+  style: Theme.of(context).textTheme.bodyLarge,
+),
+              const SizedBox(height: 16),
+             Text(
+  'Up to ${room['capacity']} guests',
+  style: Theme.of(context).textTheme.bodyMedium,
+),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 4,
+                children: (room['amenities'] as List)
+                    .map(
+                      (item) => Chip(label: Text(item as String)),
+                    )
+                    .toList(),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                money(room['hourly_rate_cents'] as num),
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+              const SizedBox(height: 4),
+              Text(
+                money(criteria.estimate(room)),
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+              const SizedBox(height: 8),
+              Text(
+                approval
+                    ? 'Administrator approval required'
+                    : 'Instant confirmation',
+              ),
+              const SizedBox(height: 16),
+              OutlinedButton.icon(
+                onPressed: () => _chooseRoom(room, criteria),
+                icon: const Icon(Icons.arrow_forward),
+                label: Text(
+                  db.auth.currentUser == null
+                      ? 'Sign in to choose'
+                      : 'Choose room',
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    ),
+  );
+}
 
   Widget _compactAdminBooking(Row booking) {
     final start = DateTime.parse(booking['starts_at'] as String);
@@ -1237,7 +1379,7 @@ class _BookingHomeState extends State<BookingHome> {
         status.toUpperCase(),
         style: TextStyle(
           color: statusColor,
-          fontSize: 11,
+          fontSize: 13,
           fontWeight: FontWeight.w700,
         ),
       ),
@@ -1307,16 +1449,12 @@ class _BookingHomeState extends State<BookingHome> {
       children: [
         Text(
           booking['title'] as String,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+          style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 18, height: 1.35),
         ),
         const SizedBox(height: 3),
         Text(
           '$roomName · ${booking['attendees']} guests',
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
+          style: TextStyle(fontSize: 16, height: 1.45, color: scheme.onSurfaceVariant),
         ),
       ],
     );
@@ -1327,14 +1465,12 @@ class _BookingHomeState extends State<BookingHome> {
       children: [
         Text(
           '${bookingTime(start, _zone)} – ${endTime(end, _zone)}',
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: const TextStyle(fontSize: 12),
+          style: const TextStyle(fontSize: 16, height: 1.45),
         ),
         const SizedBox(height: 3),
         Text(
           '${money(booking['quoted_total_cents'] as num)} quoted',
-          style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
+          style: TextStyle(fontSize: 16, height: 1.45, color: scheme.onSurfaceVariant),
         ),
       ],
     );
@@ -1379,17 +1515,15 @@ class _BookingHomeState extends State<BookingHome> {
           return Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              widgets.Row(
-                children: [
-                  Expanded(child: identity),
-                  const SizedBox(width: 8),
-                  statusBadge,
-                ],
-              ),
-              const SizedBox(height: 6),
+              identity,
+              const SizedBox(height: 10),
+              statusBadge,
+              const SizedBox(height: 12),
               schedule,
-              if (canManage)
+              if (canManage) ...[
+                const SizedBox(height: 12),
                 Align(alignment: Alignment.centerRight, child: actions),
+              ],
             ],
           );
         },
@@ -1582,6 +1716,7 @@ class _BookingHomeState extends State<BookingHome> {
   @override
   Widget build(BuildContext context) {
     final desktop = MediaQuery.sizeOf(context).width >= 1000;
+    final mobile = MediaQuery.sizeOf(context).width < 600;
 
     final destinations = [
       const NavigationDestination(
@@ -1800,14 +1935,7 @@ if (!_loadingOrganizations &&
         ),
       );
     }
-    return Scaffold(
-      appBar: AppBar(
-        toolbarHeight: 104,
-        title: RmBrandTitle(
-          organizationId: _organization?['id'] as String?,
-        ),
-      
-    actions: [
+    final headerActions = <Widget>[
           if (db.auth.currentUser != null)
             FutureBuilder<bool>(
               future: db.rpc('rm_is_system_admin'),
@@ -1881,7 +2009,30 @@ if (!_loadingOrganizations &&
               child: const Text('Sign out'),
             ),
           const SizedBox(width: 8),
-        ],
+
+    ];
+
+    return Scaffold(
+      appBar: AppBar(
+        toolbarHeight: mobile ? 68 : 104,
+        titleSpacing: 16,
+        title: RmBrandTitle(
+          organizationId: _organization?['id'] as String?,
+        ),
+        actions: mobile ? null : headerActions,
+        bottom: mobile
+            ? PreferredSize(
+                preferredSize: const Size.fromHeight(56),
+                child: SizedBox(
+                  height: 56,
+                  child: SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    child: widgets.Row(children: headerActions),
+                  ),
+                ),
+              )
+            : null,
       ),
       body: widgets.Row(
         crossAxisAlignment: CrossAxisAlignment.stretch,

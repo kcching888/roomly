@@ -142,6 +142,7 @@ class _OrganizationProfileScreenState extends State<OrganizationProfileScreen> {
       padding: const EdgeInsets.only(bottom: 16),
       child: TextFormField(
         controller: controller,
+        style: Theme.of(context).textTheme.bodyLarge,
         enabled: !_saving,
         maxLength: limit,
         minLines: lines,
@@ -278,32 +279,77 @@ class _OrganizationProfileScreenState extends State<OrganizationProfileScreen> {
                             const SizedBox(height: 16),
                           ],
 
-                          FilledButton.icon(
-                            onPressed: _saving ? null : _saveProfile,
-                            icon: _saving
-                                ? const SizedBox(
-                                    width: 18,
-                                    height: 18,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                    ),
-                                  )
-                                : const Icon(Icons.save_outlined),
-                            label: Text(_saving ? 'Saving…' : 'Save profile'),
-                          ),
-                          OutlinedButton.icon(
-                            icon: const Icon(Icons.photo_library_outlined),
-                            label: const Text('Photos and branding'),
-                            onPressed: () {
-                              Navigator.of(context).push<void>(
-                                MaterialPageRoute<void>(
-                                  builder: (_) => RmOrganizationMediaScreen(
-                                    organizationId: widget.organizationId,
-                                  ),
-                                ),
-                              );
-                            },
-                          ),
+                          LayoutBuilder(
+  builder: (context, constraints) {
+    final compact = constraints.maxWidth < 520;
+
+    final photosButton = OutlinedButton.icon(
+      onPressed: _saving
+          ? null
+          : () {
+              Navigator.of(context).push<void>(
+                MaterialPageRoute<void>(
+                  builder: (_) => RmOrganizationMediaScreen(
+                    organizationId: widget.organizationId,
+                  ),
+                ),
+              );
+            },
+      icon: const Icon(Icons.photo_library_outlined),
+      label: const Text(
+        'Photos and branding',
+        textAlign: TextAlign.center,
+      ),
+      style: OutlinedButton.styleFrom(
+        minimumSize: const Size(0, 52),
+        padding: const EdgeInsets.symmetric(
+          horizontal: 16,
+          vertical: 14,
+        ),
+      ),
+    );
+
+    final saveButton = FilledButton.icon(
+      onPressed: _saving ? null : _saveProfile,
+      icon: _saving
+          ? const SizedBox(
+              width: 18,
+              height: 18,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+              ),
+            )
+          : const Icon(Icons.save_outlined),
+      label: Text(_saving ? 'Saving…' : 'Save profile'),
+      style: FilledButton.styleFrom(
+        minimumSize: const Size(0, 52),
+        padding: const EdgeInsets.symmetric(
+          horizontal: 16,
+          vertical: 14,
+        ),
+      ),
+    );
+
+    if (compact) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          photosButton,
+          const SizedBox(height: 12),
+          saveButton,
+        ],
+      );
+    }
+
+    return Row(
+      children: [
+        photosButton,
+        const Spacer(),
+        saveButton,
+      ],
+    );
+  },
+),
                         ],
                       ),
                     ),

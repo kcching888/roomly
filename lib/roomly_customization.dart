@@ -90,42 +90,150 @@ class RmAppLogo extends StatelessWidget {
 }
 
 class RmBrandTitle extends StatelessWidget {
-  const RmBrandTitle({super.key, this.organizationId, this.title});
+  const RmBrandTitle({
+    super.key,
+    this.organizationId,
+    this.title,
+  });
+
   final String? organizationId;
   final String? title;
+
   @override
   Widget build(BuildContext context) {
-    final height = title == null ? 86.4 : 67.2;
-    final logo = organizationId == null ? RmAppLogo(height: height)
-      : RmMediaImage(organizationId: organizationId!, kind: 'logo',
-          fit: BoxFit.contain, height: height, width: height * 3,
-          fallback: RmAppLogo(height: height));
-    if (title == null) return logo;
-    return Row(children: [logo, const SizedBox(width: 12),
-      Expanded(child: Text(title!, maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-        style: Theme.of(context).textTheme.titleMedium)),
-    ]);
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final mobile = MediaQuery.sizeOf(context).width < 600;
+
+        final availableWidth = constraints.hasBoundedWidth
+            ? constraints.maxWidth
+            : 240.0;
+
+        final preferredWidth = mobile
+            ? (title == null ? 156.0 : 96.0)
+            : (title == null ? 259.2 : 201.6);
+
+        // When a page title is present, leave space for its text.
+        final maximumLogoWidth = title == null
+            ? availableWidth
+            : availableWidth * 0.38;
+
+        final logoWidth = preferredWidth > maximumLogoWidth
+            ? maximumLogoWidth
+            : preferredWidth;
+
+        final logoHeight = logoWidth / 3;
+
+        final logo = SizedBox(
+          width: logoWidth,
+          height: logoHeight,
+          child: organizationId == null
+              ? RmAppLogo(height: logoHeight)
+              : RmMediaImage(
+                  organizationId: organizationId!,
+                  kind: 'logo',
+                  fit: BoxFit.contain,
+                  height: logoHeight,
+                  width: logoWidth,
+                  fallback: RmAppLogo(height: logoHeight),
+                ),
+        );
+
+        if (title == null) {
+          return Align(
+            alignment: Alignment.centerLeft,
+            child: logo,
+          );
+        }
+
+        return Row(
+          children: [
+            logo,
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                title!,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+            ),
+          ],
+        );
+      },
+    );
   }
 }
 
 // Wrap each PAGE Scaffold once, not each dialog. It never covers page controls.
 class RmPageShell extends StatelessWidget {
-  const RmPageShell({super.key, required this.child});
+  const RmPageShell({
+    super.key,
+    required this.child,
+  });
+
   final Widget child;
+
   @override
-  Widget build(BuildContext context) => Column(children: [
-    Expanded(child: child),
-    Material(color: Theme.of(context).colorScheme.surface,
-      child: SafeArea(top: false, child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-        child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-          Text('Powered by', style: Theme.of(context).textTheme.bodySmall),
-          const SizedBox(width: 8), const RmAppLogo(height: 22),
-        ]),
-      )),
-    ),
-  ]);
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        // Avoid laying out the full page during an extremely
+        // small or transitional viewport.
+        if (constraints.maxWidth < 48 ||
+            constraints.maxHeight < 48) {
+          return const SizedBox.shrink();
+        }
+
+        final media = MediaQuery.of(context);
+
+        // Reserve enough room for the page. Hide the footer
+        // when the viewport is short or the keyboard is open.
+        final showFooter =
+            constraints.maxWidth >= 240 &&
+            constraints.maxHeight >= 320 &&
+            media.viewInsets.bottom == 0;
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Expanded(
+              child: child,
+            ),
+            if (showFooter)
+              Material(
+                color: Theme.of(context).colorScheme.surface,
+                child: SafeArea(
+                  top: false,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 10,
+                    ),
+                    child: Wrap(
+                      alignment: WrapAlignment.center,
+                      crossAxisAlignment:
+                          WrapCrossAlignment.center,
+                      spacing: 8,
+                      runSpacing: 4,
+                      children: [
+                        Text(
+                          'Powered by',
+                          style: Theme.of(context)
+                              .textTheme
+                              .bodySmall,
+                        ),
+                        const RmAppLogo(height: 22),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        );
+      },
+    );
+  }
 }
 
 Future<bool> _confirm(BuildContext context, String title, Widget content) async {

@@ -36,6 +36,43 @@ class _AdminCalendarScreenState extends State<AdminCalendarScreen> {
   List<AdminRow> _schedule = [];
   bool _loading = true;
   String? _error;
+  final _timelineScroll = ScrollController();
+  final _roomScroll = ScrollController();
+  Object? _requestedBookingId;
+  AdminRow? _focusedBooking;
+  bool _focusPending = false;
+
+  @override
+  void dispose() {
+    _timelineScroll.dispose();
+    _roomScroll.dispose();
+    super.dispose();
+  }
+
+  void _scrollToFocusedBooking(double hourWidth, List<AdminRow> rooms) {
+    if (!_focusPending) return;
+    _focusPending = false;
+    final booking = _focusedBooking;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      if (booking == null) {
+        if (_timelineScroll.hasClients) _timelineScroll.jumpTo(0);
+        if (_roomScroll.hasClients) _roomScroll.jumpTo(0);
+        return;
+      }
+      final time = _compactFacilityTime(booking['booking_starts_at'] as String);
+      final x = _compactMinutesFromStart(time) / 60 * hourWidth - 12;
+      final index = rooms.indexWhere((r) => r['room_id'] == booking['room_id']);
+      final y = index < 0 ? 0.0 : index * _compactRowHeight;
+      if (_timelineScroll.hasClients) {
+        _timelineScroll.jumpTo(x.clamp(0.0, _timelineScroll.position.maxScrollExtent).toDouble());
+      }
+      if (_roomScroll.hasClients) {
+        _roomScroll.jumpTo(y.clamp(0.0, _roomScroll.position.maxScrollExtent).toDouble());
+      }
+    });
+  }
+
 
   static const double _hourWidth = 110;
   static const int _startHour = 6;
@@ -44,9 +81,11 @@ class _AdminCalendarScreenState extends State<AdminCalendarScreen> {
   static const int _compactStartHour = 6;
 static const int _compactEndHour = 24;
 
-static const double _compactHeaderHeight = 32;
-static const double _compactRowHeight = 56;
-static const double _compactMinimumHourWidth = 32;
+double get _compactHeaderHeight =>
+    44 * math.max(1.0, MediaQuery.textScalerOf(context).scale(16) / 16);
+double get _compactRowHeight =>
+    104 * math.max(1.0, MediaQuery.textScalerOf(context).scale(16) / 16);
+static const double _compactMinimumHourWidth = 112;
 
   @override
   void initState() {
@@ -76,6 +115,19 @@ static const double _compactMinimumHourWidth = 32;
 
       setState(() {
         _schedule = schedule;
+        final bookings = schedule.where((r) => r['booking_id'] != null).toList()
+          ..sort((a, b) => DateTime.parse(a['booking_starts_at'] as String)
+              .compareTo(DateTime.parse(b['booking_starts_at'] as String)));
+        _focusedBooking = null;
+        for (final booking in bookings) {
+          if (booking['booking_id'] == _requestedBookingId) {
+            _focusedBooking = booking;
+            break;
+          }
+        }
+        _focusedBooking ??= bookings.isEmpty ? null : bookings.first;
+        _requestedBookingId = null;
+        _focusPending = true;
         _loading = false;
       });
     } catch (error) {
@@ -111,6 +163,9 @@ static const double _compactMinimumHourWidth = 32;
         organizationName: widget.organizationName,
         timezone: widget.timezone,
         initialDay: _selectedDay,
+        onBookingSelected: (booking) {
+          _requestedBookingId = booking['booking_id'];
+        },
       ),
     ),
   );
@@ -375,13 +430,8 @@ Future<void> _openBookingDetails(AdminRow booking) async {
     final rooms = _rooms();
     final dayLabel = DateFormat('EEEE, MMMM d, yyyy').format(_selectedDay);
 
-    return Scaffold(
-      appBar: AppBar(
-        title: RmBrandTitle(
-          organizationId: widget.organizationId,
-          title: 'Calendar · ${widget.organizationName}'
-          ),
-        actions: [
+    final mobile = MediaQuery.sizeOf(context).width < 600;
+    final calendarActions = <Widget>[
           IconButton(
             tooltip: 'Monthly overview',
             onPressed: _openMonthCalendar,
@@ -428,7 +478,48 @@ Future<void> _openBookingDetails(AdminRow booking) async {
             onPressed: _loading ? null : _loadSchedule,
             icon: const Icon(Icons.refresh),
           ),
-        ],
+
+    ];
+
+    return Scaffold(
+      appBar: AppBar(
+        toolbarHeight: mobile ? 72 : 80,
+        titleSpacing: 8,
+        title: mobile
+            ? LayoutBuilder(
+                builder: (context, constraints) {
+                  final logoWidth = math.min(156.0, constraints.maxWidth);
+                  return Align(
+                    alignment: Alignment.centerLeft,
+                    child: RmMediaImage(
+                      organizationId: widget.organizationId,
+                      kind: 'logo',
+                      width: logoWidth,
+                      height: logoWidth / 3,
+                      fit: BoxFit.contain,
+                      fallback: RmAppLogo(height: logoWidth / 3),
+                    ),
+                  );
+                },
+              )
+            : RmBrandTitle(
+                organizationId: widget.organizationId,
+                title: 'Calendar · ${widget.organizationName}',
+              ),
+        actions: mobile ? null : calendarActions,
+        bottom: mobile
+            ? PreferredSize(
+                preferredSize: const Size.fromHeight(56),
+                child: SizedBox(
+                  height: 56,
+                  child: SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    child: Row(children: calendarActions),
+                  ),
+                ),
+              )
+            : null,
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
@@ -445,7 +536,29 @@ Future<void> _openBookingDetails(AdminRow booking) async {
                         style: Theme.of(context).textTheme.titleLarge,
                       ),
                       const SizedBox(height: 4),
-                      Text('Timezone: ${widget.timezone}'),
+                      Text(
+                        'Timezone: ${widget.timezone}',
+                        style: Theme.of(context).textTheme.bodyMedium,
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Swipe the timeline left or right. Tap a booking for details.',
+                        style: Theme.of(context).textTheme.bodyMedium,
+                      ),
+                      if (_focusedBooking != null) ...[
+                        const SizedBox(height: 8),
+                        Text(
+                          "Located: ${_focusedBooking!['booking_title']} · "
+                          "${_focusedBooking!['room_name']} · "
+                          '${DateFormat.jm().format(_compactFacilityTime(_focusedBooking!["booking_starts_at"] as String))}',
+                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ] else if (_error == null) ...[
+                        const SizedBox(height: 8),
+                        const Text('No bookings for this day.'),
+                      ],
                       if (_error != null) ...[
                         const SizedBox(height: 12),
                         Text(
@@ -635,7 +748,7 @@ Widget _compactDayTimeline() {
   return LayoutBuilder(
     builder: (context, constraints) {
       final roomColumnWidth =
-          constraints.maxWidth < 600 ? 110.0 : 150.0;
+          constraints.maxWidth < 600 ? 132.0 : 170.0;
 
       final availableTimelineWidth = math.max(
         0.0,
@@ -649,7 +762,9 @@ Widget _compactDayTimeline() {
 
       final timelineWidth = hourWidth * hourCount;
 
+      _scrollToFocusedBooking(hourWidth, rooms);
       return SingleChildScrollView(
+        controller: _roomScroll,
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -667,7 +782,8 @@ Widget _compactDayTimeline() {
                     child: const Text(
                       'Room',
                       style: TextStyle(
-                        fontSize: 12,
+                        fontSize: 16,
+                          height: 1.35,
                         fontWeight: FontWeight.w600,
                       ),
                     ),
@@ -693,7 +809,8 @@ Widget _compactDayTimeline() {
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
-                          fontSize: 12,
+                          fontSize: 16,
+                          height: 1.35,
                           fontWeight: FontWeight.w500,
                           color: room['room_active'] == true
                               ? scheme.onSurface
@@ -709,6 +826,7 @@ Widget _compactDayTimeline() {
             // Header and all timelines share one horizontal scroll.
             Expanded(
               child: SingleChildScrollView(
+                controller: _timelineScroll,
                 scrollDirection: Axis.horizontal,
                 child: SizedBox(
                   width: timelineWidth,
@@ -732,7 +850,8 @@ Widget _compactDayTimeline() {
                                   child: Text(
                                     _compactHourLabel(hour),
                                     style: TextStyle(
-                                      fontSize: 10,
+                                      fontSize: 14,
+                                      height: 1.3,
                                       color:
                                           scheme.onSurfaceVariant,
                                     ),
@@ -871,7 +990,14 @@ Widget _compactTimelineBooking(
       message: '$title\n$timeLabel\n$status',
       child: Material(
         color: background,
-        borderRadius: BorderRadius.circular(5),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(5),
+          side: BorderSide(
+            color: booking['booking_id'] == _focusedBooking?['booking_id']
+                ? scheme.primary : Colors.transparent,
+            width: 3,
+          ),
+        ),
         clipBehavior: Clip.antiAlias,
         child: InkWell(
           onTap: () => _openBookingDetails(booking),
@@ -903,7 +1029,8 @@ Widget _compactTimelineBooking(
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
-                        fontSize: 11,
+                        fontSize: 16,
+                        height: 1.35,
                         fontWeight: FontWeight.w600,
                         color: foreground,
                       ),
@@ -915,7 +1042,8 @@ Widget _compactTimelineBooking(
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
-                          fontSize: 9,
+                          fontSize: 14,
+                          height: 1.35,
                           color: foreground,
                         ),
                       ),
